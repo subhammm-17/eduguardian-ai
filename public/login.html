@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#241812" />
+  <meta name="color-scheme" content="dark" />
+  <title>Sign in — EduGuardian AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+  <link rel="stylesheet" href="/assets/site.css" />
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-top">
+      <a href="/" class="logo">
+        <span class="logo-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        EduGuardian AI
+      </a>
+    </div>
+    <main class="auth-main">
+      <div class="card auth-card">
+        <h1 id="auth-title">Sign in</h1>
+        <p class="muted small" id="auth-sub">Welcome back. Continue where you left off.</p>
+
+        <form class="auth-form" id="auth-form" novalidate>
+          <div class="field" id="name-field" hidden>
+            <label for="name">Full name</label>
+            <input class="input" id="name" name="name" autocomplete="name" />
+          </div>
+          <div class="field">
+            <label for="email">University email</label>
+            <input class="input" id="email" name="email" type="email" autocomplete="email" required />
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input class="input" id="password" name="password" type="password" autocomplete="current-password" required minlength="8" />
+            <span class="hint" id="pw-hint" hidden>At least 8 characters.</span>
+          </div>
+          <p class="error-text" id="auth-error" role="alert" hidden></p>
+          <button class="btn btn-primary btn-block btn-lg" type="submit" id="auth-submit">Sign in</button>
+        </form>
+
+        <p class="auth-switch" id="auth-switch">
+          New to EduGuardian AI? <button type="button" data-switch>Create an account</button>
+        </p>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="/assets/login.js"></script>
+</body>
+</html>

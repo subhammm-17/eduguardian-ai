@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Log in · EduGuardian AI</title>
+
+  <!-- Font: Plus Jakarta Sans (from Google Fonts) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+</head>
+<body>
+  <div class="auth-page">
+    <!-- ===== Left: what EduGuardian is ===== -->
+    <section class="auth-hero">
+      <div class="brand">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.4-3 7.8-7 9-4-1.2-7-4.6-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+        </div>
+        <span class="brand-name">EduGuardian AI</span>
+      </div>
+
+      <div>
+        <h1>Understand every answer.</h1>
+        <p class="lead">Ask your college doubts in Maths, Digital Logic and Quantum Computing, and get clear step-by-step explanations you can check.</p>
+      </div>
+
+      <ul class="features">
+        <li>
+          <div class="f-icon">1</div>
+          <div><strong>Step-by-step explanations</strong><span>Every answer is broken into simple steps with neat maths.</span></div>
+        </li>
+        <li>
+          <div class="f-icon">2</div>
+          <div><strong>Exact graphs</strong><span>Maths graphs are drawn by SymPy, not guessed by AI.</span></div>
+        </li>
+        <li>
+          <div class="f-icon">3</div>
+          <div><strong>Never stuck</strong><span>If the main AI model is slow, a backup model answers.</span></div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ===== Right: log in / sign up form ===== -->
+    <section class="auth-side">
+      <div class="auth-card">
+        <h2 id="title">Welcome back</h2>
+        <p class="sub" id="subtitle">Log in to keep learning.</p>
+
+        <div class="tabs" role="tablist">
+          <button class="tab active" type="button" data-mode="login">Log in</button>
+          <button class="tab" type="button" data-mode="signup">Sign up</button>
+        </div>
+
+        <form id="authForm" novalidate>
+          <div class="field" id="nameField" hidden>
+            <label for="name">Your name</label>
+            <input id="name" type="text" autocomplete="name" placeholder="e.g. Asha Rao">
+          </div>
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" type="email" autocomplete="email" placeholder="you@college.edu">
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <div class="password-row">
+              <input id="password" type="password" autocomplete="current-password" placeholder="At least 8 characters">
+              <button type="button" id="togglePassword">Show</button>
+            </div>
+          </div>
+          <div class="error" id="error" hidden></div>
+          <button class="btn btn-primary btn-block" id="submitBtn" type="submit">Log in</button>
+        </form>
+
+        <p class="fine-print">No API key needed. EduGuardian uses its own keys on the server.</p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Already logged in? Go straight to the app.
+    if (getToken()) location.replace("index.html");
+
+    let mode = "login";
+    const els = {
+      title: document.getElementById("title"),
+      subtitle: document.getElementById("subtitle"),
+      nameField: document.getElementById("nameField"),
+      name: document.getElementById("name"),
+      email: document.getElementById("email"),
+      password: document.getElementById("password"),
+      error: document.getElementById("error"),
+      submit: document.getElementById("submitBtn"),
+    };
+
+    // ---- Switch between "Log in" and "Sign up" ----
+    function setMode(newMode) {
+      mode = newMode;
+      const signup = mode === "signup";
+      document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.mode === mode));
+      els.nameField.hidden = !signup;
+      els.title.textContent = signup ? "Create your account" : "Welcome back";
+      els.subtitle.textContent = signup ? "It takes less than a minute." : "Log in to keep learning.";
+      els.submit.textContent = signup ? "Create account" : "Log in";
+      els.password.autocomplete = signup ? "new-password" : "current-password";
+      els.error.hidden = true;
+      (signup ? els.name : els.email).focus();
+    }
+    document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setMode(t.dataset.mode)));
+
+    document.getElementById("togglePassword").addEventListener("click", (e) => {
+      const hidden = els.password.type === "password";
+      els.password.type = hidden ? "text" : "password";
+      e.target.textContent = hidden ? "Hide" : "Show";
+    });
+
+    function showError(message) {
+      els.error.textContent = message;
+      els.error.hidden = false;
+    }
+
+    // ---- Send the form to the backend ----
+    document.getElementById("authForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const body = { email: els.email.value.trim(), password: els.password.value };
+      if (mode === "signup") body.name = els.name.value.trim();
+
+      if (mode === "signup" && !body.name) return showError("Please enter your name.");
+      if (!body.email) return showError("Please enter your email.");
+      if (!body.password) return showError("Please enter your password.");
+
+      els.submit.disabled = true;
+      els.error.hidden = true;
+      try {
+        const res = await fetch(API_BASE + "/auth/" + mode, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) return showError(await errorMessage(res));
+        const data = await res.json();
+        saveLogin(data.token, data.user);
+        location.replace("index.html");
+      } catch (err) {
+        showError("Could not reach the backend. Is uvicorn running at " + API_BASE + " ?");
+      } finally {
+        els.submit.disabled = false;
+      }
+    });
+
+    els.email.focus();
+  </script>
+</body>
+</html>

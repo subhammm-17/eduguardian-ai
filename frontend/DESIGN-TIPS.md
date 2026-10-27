@@ -19,10 +19,9 @@
 
 ## Ready for your next feature: the "Verified" badge
 
-When the backend starts returning an extra field, for example
-`{"subject": ..., "model": ..., "answer": ..., "verified": true}` from the SymPy check,
-the page automatically shows a green **✓ Verified** badge (or orange **⚠ Could not verify**
-for `false`). No frontend change needed.
+The page already has the styles for a green **✓ Verified** and an orange **⚠ Could not verify**
+badge (`.badge.ok` and `.badge.fail`). When we add the SymPy check, the backend will send the
+result and we will switch the badge on.
 
 ## Easy things to try yourself (good practice)
 
