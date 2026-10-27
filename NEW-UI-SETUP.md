@@ -33,6 +33,13 @@ Your changes come with you to the new branch. Nothing is committed yet.
 
 In File Explorer, open `Documents\eduguardian-ai` and double-click **`Start EduGuardian.bat`**.
 
+- First it gets the newest version from GitHub by itself (no Git Bash needed).
+  If you're offline, or you changed files that the update also changes, it skips
+  the update and starts the version you have. Nothing is lost.
+- It installs Python packages only when `backend/requirements.txt` changed.
+- To get a new feature: merge its pull request on GitHub, then double-click again.
+- If you are on a branch other than `main`, it asks: press **M** to go back to `main`,
+  or wait 5 seconds to keep your branch.
 - A black window opens and starts the backend. It also serves the website now,
   so there is only one thing to start.
 - After a few seconds your browser opens **http://127.0.0.1:8000** by itself.
@@ -45,7 +52,7 @@ In File Explorer, open `Documents\eduguardian-ai` and double-click **`Start EduG
 Opening `public\index.html` directly still won't work: the pages must come from the server.
 
 **First time only:** the start file uses the Python environment in `backend\venv`.
-You already have it. If it's ever missing, make it in Git Bash:
+If it's missing, the start file now makes it for you. To make it by hand in Git Bash:
 
 ```bash
 cd ~/Documents/eduguardian-ai/backend
