@@ -10,6 +10,7 @@ import {
   QUIZ_HISTORY, REVIEWS_WEEK, PROMPT_TEMPLATES, QUIZ_TEMPLATES, ROADMAP_TEMPLATES,
 } from "./fixtures.js";
 import { figure, lineChart, barChart, wireCharts } from "./figures.js";
+import { circuitSvg } from "./circuits.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -102,14 +103,127 @@ function rich(md, inline = false, streaming = false) {
     return stash(g.ib ?? g.id, false);
   });
   if (streaming) text = cutUnfinishedMath(text);
+  if (streaming) text = cutUnfinishedDiagram(text);
   let html = inline ? marked.parseInline(text) : marked.parse(text);
   html = callouts(DOMPurify.sanitize(html));
+  if (!inline) html = tablesAndDiagrams(html);
   return html.replace(/@@M(\d+)@@/g, (_, i) => {
     const m = math[i];
     if (!window.katex) return escapeHtml(m.t);
     return katex.renderToString(m.t, { displayMode: m.display && !inline, throwOnError: false });
   });
 }
+
+/* ---------- Tables and diagrams in answers ---------- */
+
+// While streaming, a ```logic or ```mermaid block that isn't finished yet is
+// shown as "Drawing diagram…" instead of half-written code.
+function cutUnfinishedDiagram(text) {
+  const fences = [...text.matchAll(/^ {0,3}```(\w*)/gm)];
+  if (fences.length % 2 === 0) return text;
+  const last = fences.at(-1);
+  if (!["logic", "mermaid"].includes(last[1])) return text;
+  return text.slice(0, last.index) + "\n\n*Drawing diagram…*";
+}
+
+// Wide tables scroll sideways on phones, ```logic blocks become circuit
+// drawings, and ```mermaid blocks wait for drawMermaid() (they need a library).
+function tablesAndDiagrams(html) {
+  if (!html.includes("<table") && !html.includes("language-logic") && !html.includes("language-mermaid")) return html;
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  tpl.content.querySelectorAll("table").forEach((t) => {
+    const wrap = document.createElement("div");
+    wrap.className = "table-wrap";
+    t.replaceWith(wrap);
+    wrap.append(t);
+  });
+  tpl.content.querySelectorAll("pre > code.language-logic").forEach((code) => {
+    const svgHtml = circuitSvg(code.textContent);
+    if (!svgHtml) return; // couldn't read it: keep the text
+    const fig = document.createElement("figure");
+    fig.className = "diagram circuit-box";
+    fig.innerHTML = svgHtml; // built by circuits.js, which escapes every name
+    code.parentElement.replaceWith(fig);
+  });
+  tpl.content.querySelectorAll("pre > code.language-mermaid").forEach((code) => {
+    const fig = document.createElement("figure");
+    fig.className = "diagram mermaid-box";
+    fig.dataset.src = code.textContent;
+    fig.innerHTML = `<p class="muted small">Drawing diagram…</p>`;
+    code.parentElement.replaceWith(fig);
+  });
+  return tpl.innerHTML;
+}
+
+// Mermaid (flowcharts, block diagrams, state diagrams) is a big library, so it
+// is only downloaded the first time an answer has a ```mermaid block.
+const MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+let mermaidLib = null;
+let mermaidCount = 0;
+
+// Mermaid needs real colours, so read them from the current theme's tokens.
+function mermaidTheme() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name) => css.getPropertyValue(name).trim();
+  return {
+    startOnLoad: false,
+    securityLevel: "strict",
+    theme: "base",
+    htmlLabels: false,
+    flowchart: { htmlLabels: false },
+    fontFamily: "IBM Plex Sans, sans-serif",
+    themeVariables: {
+      background: v("--surface"),
+      primaryColor: v("--accent-weak"),
+      primaryBorderColor: v("--accent-bright"),
+      primaryTextColor: v("--text"),
+      secondaryColor: v("--surface-2"),
+      tertiaryColor: v("--surface-2"),
+      lineColor: v("--muted"),
+      textColor: v("--text"),
+      mainBkg: v("--surface-2"),
+      nodeBorder: v("--border-strong"),
+      clusterBkg: v("--surface"),
+      edgeLabelBackground: v("--surface"),
+    },
+  };
+}
+
+async function drawMermaid(root = document) {
+  const boxes = [...root.querySelectorAll(".mermaid-box[data-src]")];
+  if (!boxes.length) return;
+  try {
+    mermaidLib ??= (await import(MERMAID_URL)).default;
+  } catch (e) {
+    boxes.forEach(showDiagramText);
+    return;
+  }
+  mermaidLib.initialize(mermaidTheme());
+  for (const box of boxes) {
+    try {
+      const { svg } = await mermaidLib.render(`mmd-${++mermaidCount}`, box.dataset.src);
+      box.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
+      box.querySelector("svg")?.classList.add("mermaid-svg");
+    } catch (e) {
+      showDiagramText(box); // the model wrote something Mermaid can't read
+    }
+  }
+}
+
+// Fallback: show the diagram's text as a code block
+function showDiagramText(box) {
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.textContent = box.dataset.src;
+  pre.append(code);
+  box.replaceWith(pre);
+}
+
+// Redraw Mermaid diagrams when the bright/dark theme changes
+new MutationObserver(() => mermaidLib && drawMermaid()).observe(document.documentElement, {
+  attributes: true, attributeFilter: ["data-theme"],
+});
 
 function toast(message, type = "") {
   const el = document.createElement("div");
@@ -346,6 +460,7 @@ async function ask(text) {
     }
     prose.classList.remove("caret");
     prose.innerHTML = rich(answer || "*(The model sent an empty answer. Please try again.)*");
+    drawMermaid(prose);
     // Verified stays off until answer checking with SymPy is added (PLAN.md, milestone 4).
     $(".msg-meta", msg).innerHTML = metaBadges({ socratic, verified: false, by: answeredBy });
     state.history.push({ role: "ai", text: answer, socratic });
@@ -386,6 +501,7 @@ async function showHint(level) {
   try {
     const data = await api.getHint({ subject: state.subject, question, level: level + 1, primary: state.model });
     msg.innerHTML = `<div class="hint-msg"><div class="hint-title">Hint ${level + 1} · ${HINT_LABELS[level]}</div><div class="prose">${rich(data.hint)}</div></div>`;
+    drawMermaid(msg);
     state.hintLevel = level + 1;
   } catch (err) {
     if (err.status === 401) return backToLogin();

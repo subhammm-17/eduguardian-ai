@@ -110,6 +110,25 @@
 .prose > * + * { margin-top: 0.75em; }
 .prose ul, .prose ol { padding-left: 1.3em; margin-bottom: 0; }
 .prose code { font-family: var(--font-mono); font-size: 0.9em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+/* Code blocks: one box, not a pill around every line */
+.prose pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; overflow-x: auto; }
+.prose pre code { background: none; padding: 0; border-radius: 0; font-size: 13px; line-height: 1.5; }
+/* Tables (truth tables etc.): real rows and columns with lines between them */
+.prose .table-wrap { overflow-x: auto; max-width: 100%; }
+.prose table { border-collapse: collapse; font-size: 14px; min-width: 40%; }
+.prose th, .prose td { border: 1px solid var(--border-strong); padding: 6px 14px; text-align: center; }
+.prose th { background: var(--surface-2); color: var(--accent-text); font-weight: 600; }
+.prose tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+.prose .circuit-box text.ink { font-size: 13px; }
+/* Circuit and Mermaid diagrams drawn from the answer */
+.prose .diagram { overflow-x: auto; justify-items: center; }
+.prose .circuit-box .fig { max-width: 100%; height: auto; }
+.prose .circuit-box .fig + .fig { margin-top: 10px; }
+.fig .wire { stroke: var(--muted); stroke-width: 1.8; fill: none; stroke-linejoin: round; }
+.fig .gate-line { stroke: var(--accent-bright); stroke-width: 2; fill: none; }
+.fig text.small-t { font-size: 10px; fill: var(--muted); }
+.fig text.ink.small-t { fill: var(--text); font-weight: 600; }
+.prose .mermaid-box svg { max-width: 100%; height: auto; }
 .prose .katex-display { margin: 0.9em 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
 .hint-msg { border-left: 2px solid var(--accent); padding: 4px 0 4px 14px; }
 .hint-msg .hint-title { font-size: 12px; font-weight: 600; color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }

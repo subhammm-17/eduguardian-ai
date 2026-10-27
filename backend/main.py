@@ -53,7 +53,20 @@ FORMAT_RULES = (
     "inline maths inside single dollar signs like $x^2 + 3x$, and bigger equations "
     "on their own line inside double dollar signs like $$\\frac{a}{b} = c$$. "
     "Do not use \\( \\) or \\[ \\], do not put maths in code blocks, "
-    "and do not write maths as plain text like x^2 or sqrt(x)."
+    "and do not write maths as plain text like x^2 or sqrt(x). "
+    # Tables and diagrams: the website draws these, so never use text art
+    "Write every table (truth tables, comparisons, K-map values) as a Markdown table "
+    "with a header row and | between columns, for example:\n"
+    "| A | B | Y |\n|---|---|---|\n| 0 | 0 | 0 |\n"
+    "NEVER draw diagrams with text characters (no ASCII art made of - | + / \\ lines). Instead:\n"
+    "- For a logic circuit, write a code block with the language 'logic' and one Boolean equation per line, "
+    "using AND, OR, NOT, NAND, NOR, XOR, XNOR and brackets, for example:\n"
+    "```logic\nY = (NOT S AND D0) OR (S AND D1)\n```\n"
+    "A multiplexer can also be shown as a block: Y = MUX(S, D0, D1) (select line first). "
+    "Put each output (like Sum and Carry) on its own line.\n"
+    "- For other diagrams (flowcharts, block diagrams, state machines, processes), "
+    "write a code block with the language 'mermaid' using simple Mermaid flowchart syntax "
+    "(for example: flowchart LR, then lines like A[Input] --> B[Step]). Keep labels short and plain."
 )
 
 # Socratic mode: guide the student with questions instead of giving the answer away

@@ -15,6 +15,7 @@ Continue from **PLAN.md**. Milestone 1 (the product surface) is done. Pick up th
 - Keep it plain HTML/CSS/JS: the project owner is a beginner and asked for no build step. Add libraries only from a CDN with a pinned version.
 - Design is deliberately restrained: a single warm dark theme (dark brown surfaces, deep red `--accent: #a8262e`, pastel yellow `--highlight`/`--accent-text: #f4d67a`), IBM Plex Sans for UI, Source Serif 4 for headings, and no decorative gradients. No light mode; colours live only as tokens in `styles.css`.
 - Model output is Markdown with `$…$` / `$$…$$` maths. Always render it through `rich()` in `app.js`, which extracts the maths before Markdown parsing, sanitises with DOMPurify, then renders the maths with KaTeX.
+- Tables and diagrams in answers: the model writes Markdown tables, ```logic blocks (Boolean equations, drawn as gate circuits by `assets/circuits.js`) and ```mermaid blocks (flowcharts, loaded from a pinned CDN only when needed). The rules live in `FORMAT_RULES` in `backend/main.py`. Never let the model draw ASCII art.
 - Accessibility: labelled controls, visible focus, keyboard shortcuts on flashcards (Space, arrow keys, 1–4), and a bottom tab bar below 760px.
 - Short, plain comments that a beginner can follow.
 
