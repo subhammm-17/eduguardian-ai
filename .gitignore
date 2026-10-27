@@ -218,3 +218,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# EduGuardian: the user database (accounts and logins) stays on the server only
+users.db
+*.db

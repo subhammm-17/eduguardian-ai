@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#241812" />
+  <meta name="color-scheme" content="dark" />
+  <title>EduGuardian AI — A study companion that checks its own answers</title>
+  <meta name="description" content="EduGuardian AI helps university students learn maths, digital logic and quantum computing with guided tutoring, notes-grounded answers, flashcards, quizzes and study plans." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+  <link rel="stylesheet" href="/assets/site.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container site-header-inner">
+      <a href="/" class="logo" aria-label="EduGuardian AI home">
+        <span class="logo-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        EduGuardian AI
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        <a href="#features">Features</a>
+        <a href="#verification">How it works</a>
+        <a href="#subjects">Subjects</a>
+      </nav>
+      <div class="site-header-actions">
+        <a href="/login.html" class="btn btn-ghost btn-sm">Sign in</a>
+        <a href="/login.html?mode=signup" class="btn btn-primary btn-sm">Create account</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">For maths, digital logic and quantum computing</p>
+          <h1 class="display">A study companion that checks its own answers.</h1>
+          <p class="lead">EduGuardian AI explains concepts, guides you through problems without giving the answer away, and verifies mathematical results with a symbolic solver before you rely on them.</p>
+          <div class="hero-actions">
+            <a href="/login.html?mode=signup" class="btn btn-primary btn-lg">Start studying</a>
+            <a href="/app.html" class="btn btn-lg">Open the workspace</a>
+          </div>
+          <p class="hint">Free for students. Your notes stay private to your account.</p>
+        </div>
+
+        <figure class="preview card" aria-label="Example of a guided tutoring session">
+          <div class="preview-bar">
+            <span class="badge">Maths</span>
+            <span class="badge badge-accent">Socratic</span>
+          </div>
+          <div class="preview-body">
+            <div class="pv-msg pv-user">How do I solve x² − 5x + 6 = 0?</div>
+            <div class="pv-msg pv-ai">
+              <p>Let's work it out together. A quadratic like this can often be factorised.</p>
+              <p><strong>Question:</strong> which two numbers multiply to 6 and add up to −5?</p>
+            </div>
+            <div class="pv-hints">
+              <span class="pv-hint">Hint 1 · Nudge</span>
+              <span class="pv-hint">Hint 2 · Method</span>
+              <span class="pv-hint">Hint 3 · First step</span>
+            </div>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <div class="container">
+        <div class="section-head">
+          <h2 class="section-title">Four tools, one workspace</h2>
+          <p class="muted">Each tool is designed for a specific part of studying, from first understanding to exam revision.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature card">
+            <div class="feature-illo" data-figure="illo-tutor"></div>
+            <span class="feature-num">01</span>
+            <h3>Socratic tutoring</h3>
+            <p class="muted">Switch to Socratic mode and the tutor asks guiding questions instead of giving the solution. A three-step hint ladder helps when you are stuck.</p>
+          </article>
+          <article class="feature card">
+            <div class="feature-illo" data-figure="illo-notes"></div>
+            <span class="feature-num">02</span>
+            <h3>Chat with your syllabus</h3>
+            <p class="muted">Upload lecture notes as PDF or text. Answers are drawn from your material, with citations to the exact file and page.</p>
+          </article>
+          <article class="feature card">
+            <div class="feature-illo" data-figure="illo-cards"></div>
+            <span class="feature-num">03</span>
+            <h3>Flashcards and quizzes</h3>
+            <p class="muted">Generate cards and quizzes from a topic or from your notes. Spaced repetition schedules each card for review at the right time.</p>
+          </article>
+          <article class="feature card">
+            <div class="feature-illo" data-figure="illo-roadmap"></div>
+            <span class="feature-num">04</span>
+            <h3>Study roadmap</h3>
+            <p class="muted">Enter your exam date and available hours. Receive a week-by-week plan that ends with dedicated revision days.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="verification" class="section section-alt">
+      <div class="container verify-grid">
+        <div>
+          <h2 class="section-title">Answers you can trust</h2>
+          <p class="muted lead-sm">Language models can be confidently wrong, especially with algebra. EduGuardian AI checks every mathematical result it can with SymPy, an open-source computer algebra system, and labels the answers it has confirmed.</p>
+        </div>
+        <ol class="steps">
+          <li>
+            <span class="step-num">1</span>
+            <div><h3>The model drafts an answer</h3><p class="muted">The tutor writes an explanation or generates a quiz question.</p></div>
+          </li>
+          <li>
+            <span class="step-num">2</span>
+            <div><h3>A solver checks the result</h3><p class="muted">Equations, derivatives and integrals are recomputed symbolically.</p></div>
+          </li>
+          <li>
+            <span class="step-num">3</span>
+            <div><h3>Verified answers are labelled</h3><p class="muted">You see a <span class="badge badge-success">Verified</span> label only when the two results agree.</p></div>
+          </li>
+        </ol>
+        <figure class="verify-figure card">
+          <div data-figure="illo-verify"></div>
+          <figcaption class="muted small">Example: the model and the solver both find x = 2 and x = 3, so the answer is labelled Verified.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="subjects" class="section">
+      <div class="container">
+        <div class="section-head">
+          <h2 class="section-title">Subjects</h2>
+          <p class="muted">Each subject has its own tutoring style and notation.</p>
+        </div>
+        <div class="subject-grid">
+          <div class="subject card card-pad">
+            <div class="subject-fig" data-figure="parabola"></div>
+            <h3>Mathematics</h3>
+            <p class="muted">Calculus, linear algebra and discrete maths, with graphs drawn under answers when useful.</p>
+          </div>
+          <div class="subject card card-pad">
+            <div class="subject-fig" data-figure="and"></div>
+            <h3>Digital logic</h3>
+            <p class="muted">Boolean algebra, Karnaugh maps, combinational and sequential circuits.</p>
+          </div>
+          <div class="subject card card-pad">
+            <div class="subject-fig" data-figure="bloch"></div>
+            <h3>Quantum computing</h3>
+            <p class="muted">Qubits, gates, circuits and the linear algebra behind them, in Dirac notation.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section cta">
+      <div class="container cta-inner">
+        <h2 class="section-title">Ready for your next exam?</h2>
+        <a href="/login.html?mode=signup" class="btn btn-primary btn-lg">Create a free account</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container site-footer-inner">
+      <span class="muted small">© 2026 EduGuardian AI</span>
+      <span class="muted small">Built as a student project. AI can make mistakes; check important results.</span>
+    </div>
+  </footer>
+  <script type="module">
+    // Draw the illustrations and subject figures.
+    import { renderFigures } from "/assets/figures.js";
+    renderFigures();
+  </script>
+</body>
+</html>

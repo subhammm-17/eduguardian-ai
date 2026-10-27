@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#241812" />
+  <meta name="color-scheme" content="dark" />
+  <title>Workspace — EduGuardian AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+  <link rel="stylesheet" href="/assets/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <a href="#view" class="sr-only">Skip to content</a>
+  <div class="app">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <a href="/" class="logo sidebar-logo">
+        <span class="logo-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <span>EduGuardian AI</span>
+      </a>
+      <nav class="nav">
+        <a href="#home" data-nav="home">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+          <span>Home</span>
+        </a>
+        <a href="#ask" data-nav="ask">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/></svg>
+          <span>Ask</span>
+        </a>
+        <a href="#syllabus" data-nav="syllabus">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+          <span>Syllabus</span>
+        </a>
+        <a href="#study" data-nav="study">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v12"/></svg>
+          <span>Study</span>
+        </a>
+        <a href="#roadmap" data-nav="roadmap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>
+          <span>Roadmap</span>
+        </a>
+      </nav>
+      <p class="sidebar-foot small">AI can make mistakes. Check important results.</p>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <h1 class="topbar-title" id="view-title">Home</h1>
+        <div class="topbar-controls">
+          <label class="sr-only" for="subject">Subject</label>
+          <select class="select select-sm" id="subject"></select>
+          <label class="sr-only" for="model">Model</label>
+          <select class="select select-sm" id="model" title="Primary model, with automatic backup"></select>
+          <div class="user-menu">
+            <button class="avatar" id="user-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="user-pop"><span id="user-initials">S</span><span class="sr-only">Account menu</span></button>
+            <div class="popover" id="user-pop" role="menu" hidden>
+              <div class="popover-head">
+                <strong id="user-name">Student</strong>
+                <span class="muted small" id="user-email"></span>
+              </div>
+              <hr class="divider" />
+              <button role="menuitem" class="popover-item" id="logout">Sign out</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main id="view" class="view" tabindex="-1">
+
+        <!-- HOME -->
+        <section data-view="home" hidden>
+          <div class="page-head">
+            <h2 class="page-title" id="greeting">Good morning</h2>
+            <p class="muted">Here is where you stand today.</p>
+          </div>
+          <div class="stats">
+            <div class="card stat">
+              <span class="stat-label">Cards due today</span>
+              <span class="stat-value" id="stat-due">0</span>
+              <a href="#study" class="small">Review now →</a>
+            </div>
+            <div class="card stat">
+              <span class="stat-label">Last quiz score</span>
+              <span class="stat-value" id="stat-quiz">–</span>
+              <span class="muted small" id="stat-quiz-meta"></span>
+            </div>
+            <div class="card stat">
+              <span class="stat-label">Roadmap progress</span>
+              <span class="stat-value" id="stat-road">0%</span>
+              <div class="progress" aria-hidden="true"><span id="stat-road-bar" style="width:0"></span></div>
+              <span class="muted small" id="stat-road-meta"></span>
+            </div>
+          </div>
+          <div class="chart-grid">
+            <div class="card">
+              <div class="card-head">
+                <h3 id="chart-quiz-title">Quiz scores</h3>
+                <span class="muted small">Last 8 quizzes</span>
+              </div>
+              <div class="chart-body" id="chart-quiz" aria-labelledby="chart-quiz-title"></div>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <h3 id="chart-reviews-title">Cards reviewed</h3>
+                <span class="muted small" id="chart-reviews-meta">Last 7 days</span>
+              </div>
+              <div class="chart-body" id="chart-reviews" aria-labelledby="chart-reviews-title"></div>
+            </div>
+          </div>
+          <div class="home-grid">
+            <div class="card">
+              <div class="card-head">
+                <h3>Today's plan</h3>
+                <span class="muted small" id="today-count"></span>
+              </div>
+              <ul class="task-list" id="today-tasks"></ul>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <h3>Recent questions</h3>
+                <a href="#ask" class="small">Ask a question</a>
+              </div>
+              <ul class="recent-list" id="recent"></ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- ASK -->
+        <section data-view="ask" class="ask" hidden>
+          <div class="ask-toolbar">
+            <div class="segmented" role="group" aria-label="Answer mode">
+              <button type="button" data-mode="normal" aria-pressed="true">Normal</button>
+              <button type="button" data-mode="socratic" aria-pressed="false">Socratic</button>
+            </div>
+            <p class="muted small" id="mode-desc">Full explanations with worked solutions.</p>
+            <button class="btn btn-ghost btn-sm ask-clear" id="clear-chat" hidden>New conversation</button>
+          </div>
+
+          <div class="thread" id="thread" aria-live="polite">
+            <div class="empty" id="ask-empty">
+              <h2>What are you working on?</h2>
+              <p class="muted">Ask about a concept or paste a problem. Try one of these:</p>
+              <div class="suggestions" id="suggestions"></div>
+            </div>
+          </div>
+
+          <div class="composer-wrap">
+            <div class="hints" id="hints" hidden>
+              <span class="muted small">Stuck?</span>
+              <button class="btn btn-sm" data-hint="0">Hint 1 · Nudge</button>
+              <button class="btn btn-sm" data-hint="1" disabled>Hint 2 · Method</button>
+              <button class="btn btn-sm" data-hint="2" disabled>Hint 3 · First step</button>
+            </div>
+            <form class="composer" id="composer">
+              <div class="tpl-menu">
+                <button type="button" class="btn btn-ghost btn-sm tpl-btn" id="tpl-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="tpl-pop" title="Prompt templates">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17.5h7M17.5 14v7"/></svg>
+                  <span>Templates</span>
+                </button>
+                <div class="popover tpl-pop" id="tpl-pop" role="menu" aria-label="Prompt templates" hidden></div>
+              </div>
+              <label for="question" class="sr-only">Your question</label>
+              <textarea id="question" rows="1" placeholder="Ask a question…" class="composer-input"></textarea>
+              <button class="btn btn-primary" type="submit" id="send">Send</button>
+            </form>
+            <p class="composer-note small muted">Enter to send · Shift + Enter for a new line · Fill the [gaps] in templates</p>
+          </div>
+        </section>
+
+        <!-- SYLLABUS -->
+        <section data-view="syllabus" hidden>
+          <div class="page-head">
+            <h2 class="page-title">Syllabus</h2>
+            <p class="muted">Ask questions answered only from your own lecture notes, with citations to the page.</p>
+          </div>
+          <div class="info-grid section-gap">
+            <div class="info-box"><span class="info-num">1</span><h3>Upload your notes</h3><p>Add lecture slides or notes as PDF or text, and choose the subject.</p></div>
+            <div class="info-box"><span class="info-num">2</span><h3>Ask about them</h3><p>Answers come only from your files, so they match what your course teaches.</p></div>
+            <div class="info-box"><span class="info-num">3</span><h3>Check the source</h3><p>Every answer cites the file and page, such as [1] p. 4, so you can read it yourself.</p></div>
+          </div>
+          <div class="card planned">
+            <div class="dropzone" aria-disabled="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+              <strong>Upload PDF or text notes</strong>
+              <span class="muted small">Note uploads open in the next release. Each upload will be split into sections, indexed and linked to the subject you choose.</span>
+            </div>
+            <ul class="planned-list">
+              <li><strong>Notes only</strong> or <strong>notes + general knowledge</strong> modes</li>
+              <li>Clickable citations such as [1] that open the source snippet</li>
+              <li>A clear "not in your notes" reply instead of guessing</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- STUDY -->
+        <section data-view="study" hidden>
+          <div class="study-head">
+            <div class="segmented" role="tablist" aria-label="Study tool">
+              <button type="button" role="tab" id="tab-cards" aria-selected="true" aria-controls="panel-cards">Flashcards</button>
+              <button type="button" role="tab" id="tab-quiz" aria-selected="false" aria-controls="panel-quiz">Quiz</button>
+            </div>
+          </div>
+
+          <div id="panel-cards" role="tabpanel" aria-labelledby="tab-cards">
+            <div class="deck-bar">
+              <div class="field deck-field">
+                <label for="deck">Deck</label>
+                <select class="select" id="deck"></select>
+              </div>
+              <div class="boxes" id="boxes" aria-label="Cards per Leitner box"></div>
+            </div>
+
+            <div class="card-stage" id="card-stage">
+              <p class="muted small card-pos" id="card-pos"></p>
+              <button class="flashcard" id="flashcard" aria-label="Flashcard. Press Space to flip.">
+                <span class="flashcard-inner">
+                  <span class="face front"><span class="face-label">Question</span><span class="face-text" id="card-front"></span></span>
+                  <span class="face back"><span class="face-label">Answer</span><span class="face-text" id="card-back"></span><span class="face-fig" id="card-fig" hidden></span></span>
+                </span>
+              </button>
+              <div class="ratings" id="ratings">
+                <button class="btn rate" data-rate="again">Again</button>
+                <button class="btn rate" data-rate="hard">Hard</button>
+                <button class="btn rate" data-rate="good">Good</button>
+                <button class="btn rate" data-rate="easy">Easy</button>
+              </div>
+              <p class="muted small kbd-help"><kbd>Space</kbd> flip · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>1</kbd>–<kbd>4</kbd> rate</p>
+            </div>
+
+            <div class="empty card" id="cards-done" hidden>
+              <h2>Session complete</h2>
+              <p class="muted" id="cards-done-text"></p>
+              <button class="btn btn-primary" id="cards-restart">Review again</button>
+            </div>
+          </div>
+
+          <div id="panel-quiz" role="tabpanel" aria-labelledby="tab-quiz" hidden>
+            <form class="card card-pad quiz-setup" id="quiz-setup">
+              <h2 class="section-h">New quiz</h2>
+              <div class="tpl-cards" id="quiz-templates" role="group" aria-label="Quiz templates"></div>
+              <div class="quiz-setup-grid">
+                <div class="field">
+                  <label for="quiz-topic">Topic</label>
+                  <input class="input" id="quiz-topic" value="Linear algebra and calculus basics" required />
+                </div>
+                <div class="field">
+                  <label for="quiz-diff">Difficulty</label>
+                  <select class="select" id="quiz-diff"><option>Easy</option><option selected>Medium</option><option>Hard</option></select>
+                </div>
+                <div class="field">
+                  <label for="quiz-count">Questions</label>
+                  <select class="select" id="quiz-count"><option>3</option><option selected>5</option><option>6</option></select>
+                </div>
+              </div>
+              <label class="check"><input type="checkbox" id="quiz-timer" /> Time limit (60 seconds per question)</label>
+              <div><button class="btn btn-primary" type="submit">Generate quiz</button></div>
+            </form>
+            <div id="quiz-area"></div>
+          </div>
+        </section>
+
+        <!-- ROADMAP -->
+        <section data-view="roadmap" hidden>
+          <div class="page-head">
+            <h2 class="page-title">Roadmap</h2>
+            <p class="muted">A day-by-day study plan that fits before your exam date.</p>
+          </div>
+          <h3 class="section-h">Start from a template</h3>
+          <div class="tpl-cards tpl-cards-lg section-gap" id="roadmap-templates" role="group" aria-label="Roadmap templates"></div>
+          <div class="card plan-preview section-gap" id="roadmap-preview" aria-live="polite"></div>
+          <div class="card planned">
+            <div class="planned-form">
+              <div class="field"><label for="rm-subject">Subject</label><input class="input" id="rm-subject" value="Discrete Mathematics" disabled /></div>
+              <div class="field"><label for="rm-date">Exam date</label><input class="input" id="rm-date" type="date" value="2026-12-08" disabled /></div>
+              <div class="field"><label for="rm-hours">Hours per day</label><input class="input" id="rm-hours" type="number" value="2" disabled /></div>
+              <div class="field"><label for="rm-level">Current level</label><select class="select" id="rm-level" disabled><option>Intermediate</option></select></div>
+            </div>
+            <p class="muted small">Plan generation opens in an upcoming release. Plans will include weekly topics, ticked tasks, revision days before the exam and one-click links to flashcards and quizzes.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="assertive"></div>
+  <script type="module" src="/assets/app.js"></script>
+</body>
+</html>

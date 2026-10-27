@@ -1,7 +1,8 @@
 import os
 from dotenv import load_dotenv
 
+# Checks that backend/.env has the host's keys, without ever printing them
 load_dotenv()
-key = os.getenv("GEMINI_API_KEY")
-print("Key found:", key is not None)
-print("Key length:", len(key) if key else 0)
+for name in ("GEMINI_API_KEY", "GROQ_API_KEY"):
+    key = os.getenv(name)
+    print(f"{name}: found={key is not None}, length={len(key) if key else 0}")
