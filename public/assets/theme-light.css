@@ -1,0 +1,48 @@
+/* Bright (light) colour version. Only used when the sun/moon button picks it.
+   The dark colours in styles.css are not changed: this file only overrides
+   the same colour names when <html data-theme="light"> is set by theme.js. */
+:root[data-theme="light"] {
+  /* Same deep red accent; darker red for links and labels so they read on cream */
+  --accent: #a8262e;
+  --accent-hover: #8f1f26;
+  --accent-weak: #f7dfda;
+  --accent-text: #9a2129;
+  /* Warm amber instead of pastel yellow, which is too pale on a light page */
+  --highlight: #b7791f;
+  --on-accent: #fff8e8;
+  --accent-bright: #c8363e;
+
+  /* Cream and white surfaces, from back to front */
+  --bg: #fbf6ec;
+  --surface: #fffdf8;
+  --surface-2: #f3eadb;
+  --border: #e6d8c3;
+  --border-strong: #d2bfa3;
+  /* Dark brown text */
+  --text: #2a1b13;
+  --muted: #6b5545;
+  --subtle: #87705e;
+
+  --success: #3f7a2a;
+  --success-weak: #e5efdb;
+  --danger: #b3392b;
+  --danger-weak: #f9e1dc;
+  --warn: #8a5d08;
+  --warn-weak: #f8ecd0;
+
+  --shadow: 0 1px 2px rgba(60, 35, 20, 0.08);
+  --shadow-lg: 0 10px 30px rgba(60, 35, 20, 0.14);
+  color-scheme: light;
+}
+
+/* The sun/moon button that switches between the two versions */
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; flex: none;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); color: var(--muted);
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--surface-2); color: var(--text); }
+.theme-toggle svg { width: 17px; height: 17px; }
+.theme-toggle-floating { position: fixed; top: 16px; right: 16px; z-index: 20; }
