@@ -47,6 +47,15 @@ SUBJECT_PROMPTS = {
     "quantum": "You are a quantum computing tutor for beginners. Explain concepts simply with small examples and avoid heavy jargon.",
 }
 
+# How every answer should be written, so the website can show maths properly
+FORMAT_RULES = (
+    "Formatting: write your answer in Markdown. Write ALL maths in LaTeX: "
+    "inline maths inside single dollar signs like $x^2 + 3x$, and bigger equations "
+    "on their own line inside double dollar signs like $$\\frac{a}{b} = c$$. "
+    "Do not use \\( \\) or \\[ \\], do not put maths in code blocks, "
+    "and do not write maths as plain text like x^2 or sqrt(x)."
+)
+
 # Socratic mode: guide the student with questions instead of giving the answer away
 SOCRATIC_RULES = (
     "You are in Socratic mode, and these rules win over anything above. Do NOT give the final answer or a full worked solution. "
@@ -105,7 +114,7 @@ class HintRequest(BaseModel):
 def build_prompt(subject, question, mode="normal", history=(), extra=""):
     """Puts together everything the model needs: the subject's instruction,
     Socratic rules (if on), the last few messages, then the new question."""
-    parts = [SUBJECT_PROMPTS[subject]]
+    parts = [SUBJECT_PROMPTS[subject], FORMAT_RULES]
     if mode == "socratic":
         parts.append(SOCRATIC_RULES)
     if extra:

@@ -69,21 +69,45 @@ function diagram(name, caption = "") {
   return `<figure class="diagram">${svgHtml}${caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : ""}</figure>`;
 }
 
-// Render Markdown with $…$ / $$…$$ maths. Maths is pulled out before Markdown
-// parsing so backslashes survive, then rendered with KaTeX after sanitising.
-function rich(md, inline = false) {
+// Render Markdown with maths. Models write maths in several ways, so we accept
+// $…$, $$…$$, \(…\), \[…\] and bare \begin{aligned}…\end{aligned} blocks.
+// Maths is pulled out before Markdown parsing so backslashes survive, then
+// rendered with KaTeX after sanitising. Code (`…` and ``` blocks) is left alone.
+const MATH_RE = new RegExp([
+  /(?<code>```[\s\S]*?```|`[^`\n]+`)/.source,
+  /\$\$(?<dd>[\s\S]+?)\$\$/.source,
+  /\\\[(?<db>[\s\S]+?)\\\]/.source,
+  /\\begin\{(?<env>align\*?|aligned|equation\*?|gather\*?|cases|[pbv]?matrix)\}[\s\S]*?\\end\{\k<env>\}/.source,
+  /\\\((?<ib>[\s\S]+?)\\\)/.source,
+  // $x$ but not prices like "$5 and $10" or an escaped \$
+  /(?<!\\)\$(?=\S)(?<id>[^$\n]*?\S)(?<!\\)\$(?!\d)/.source,
+].join("|"), "g");
+
+// While an answer is still streaming, maths that has started but not finished
+// (an opening $$ or \[ with no closing one yet) is hidden until it is complete.
+function cutUnfinishedMath(text) {
+  const open = text.search(/\$\$|\\\[|\\\(|\\begin\{|(?<!\\)\$(?=[^\s\d])[^$\n]*$/);
+  return open === -1 ? text : text.slice(0, open) + " …";
+}
+
+function rich(md, inline = false, streaming = false) {
   if (!window.marked || !window.DOMPurify) return escapeHtml(md);
   const math = [];
-  const stash = (t, display) => { math.push({ t, display }); return `@@M${math.length - 1}@@`; };
-  const text = md
-    .replace(/\$\$([\s\S]+?)\$\$/g, (_, t) => stash(t, true))
-    .replace(/\$([^$\n]+?)\$/g, (_, t) => stash(t, false));
+  const stash = (t, display) => { math.push({ t: t.trim(), display }); return `@@M${math.length - 1}@@`; };
+  let text = String(md ?? "").replace(MATH_RE, (whole, ...args) => {
+    const g = args.at(-1);
+    if (g.code) return whole;
+    if (g.env) return stash(whole, true);
+    if (g.dd !== undefined || g.db !== undefined) return stash(g.dd ?? g.db, true);
+    return stash(g.ib ?? g.id, false);
+  });
+  if (streaming) text = cutUnfinishedMath(text);
   let html = inline ? marked.parseInline(text) : marked.parse(text);
   html = callouts(DOMPurify.sanitize(html));
   return html.replace(/@@M(\d+)@@/g, (_, i) => {
     const m = math[i];
     if (!window.katex) return escapeHtml(m.t);
-    return katex.renderToString(m.t, { displayMode: m.display, throwOnError: false });
+    return katex.renderToString(m.t, { displayMode: m.display && !inline, throwOnError: false });
   });
 }
 
@@ -313,7 +337,7 @@ async function ask(text) {
           msg.innerHTML = `<div class="msg-meta"></div><div class="prose caret"></div>`;
           prose = $(".prose", msg);
         }
-        prose.innerHTML = rich(soFar);
+        prose.innerHTML = rich(soFar, false, true);
       },
     );
     if (!prose) {
