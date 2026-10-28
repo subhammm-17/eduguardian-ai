@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
-  <link rel="stylesheet" href="/assets/styles.css" />
-  <link rel="stylesheet" href="/assets/app.css" />
+  <link rel="stylesheet" href="/assets/styles.css?v=9" />
+  <link rel="stylesheet" href="/assets/app.css?v=9" />
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
@@ -117,16 +117,30 @@
             <div class="card">
               <div class="card-head">
                 <h3>Today's plan</h3>
-                <span class="muted small" id="today-count"></span>
+                <div class="card-head-right">
+                  <span class="muted small" id="today-count"></span>
+                  <div class="plan-menu">
+                    <button type="button" class="btn btn-ghost btn-sm plan-menu-btn" id="plan-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="plan-pop">
+                      <span>Edit plan</span>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div class="popover plan-pop" id="plan-pop" role="menu" aria-label="Edit today's plan" hidden>
+                      <button type="button" role="menuitem" class="popover-item" data-plan-action="add">Add a task</button>
+                      <button type="button" role="menuitem" class="popover-item" data-plan-action="delete">Delete tasks</button>
+                      <button type="button" role="menuitem" class="popover-item" data-plan-action="clear-done">Remove finished tasks</button>
+                    </div>
+                  </div>
+                </div>
               </div>
               <ul class="task-list" id="today-tasks"></ul>
-              <form class="task-add" id="task-add">
+              <form class="task-add" id="task-add" hidden>
                 <label class="sr-only" for="task-title">New task</label>
                 <input class="input" id="task-title" placeholder="Add a task, e.g. Revise K-maps" maxlength="120" autocomplete="off" required />
                 <label class="sr-only" for="task-minutes">Minutes</label>
                 <input class="input task-min" id="task-minutes" type="number" min="5" max="600" step="5" value="30" title="Minutes" />
                 <span class="muted small" aria-hidden="true">min</span>
-                <button class="btn btn-sm" type="submit">Add</button>
+                <button class="btn btn-sm btn-primary" type="submit">Add</button>
+                <button class="btn btn-sm btn-ghost" type="button" id="task-add-close">Done</button>
               </form>
             </div>
             <div class="card">
@@ -188,9 +202,12 @@
 
         <!-- SYLLABUS -->
         <section data-view="syllabus" hidden>
-          <div class="page-head">
-            <h2 class="page-title">Syllabus</h2>
-            <p class="muted">Ask questions answered only from your own lecture notes, with citations to the page.</p>
+          <div class="page-head page-head-row">
+            <div>
+              <h2 class="page-title">Syllabus</h2>
+              <p class="muted">Upload your syllabus and lecture notes. Soon you can ask questions answered only from them, with citations to the page.</p>
+            </div>
+            <button class="btn btn-primary" type="button" data-upload-syllabus><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg><span>Upload syllabus</span></button>
           </div>
           <div class="info-grid section-gap">
             <div class="info-box"><span class="info-num">1</span><h3>Upload your notes</h3><p>Add lecture slides or notes as PDF or text, and choose the subject.</p></div>
@@ -302,18 +319,21 @@
             </div>
             <button class="btn btn-sm" type="button" data-upload-syllabus><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg><span>Upload syllabus</span></button>
           </div>
-          <h3 class="section-h">Start from a template</h3>
-          <div class="tpl-cards tpl-cards-lg section-gap" id="roadmap-templates" role="group" aria-label="Roadmap templates"></div>
-          <div class="card plan-preview section-gap" id="roadmap-preview" aria-live="polite"></div>
-          <div class="card planned">
-            <div class="planned-form">
-              <div class="field"><label for="rm-subject">Subject</label><input class="input" id="rm-subject" value="Discrete Mathematics" disabled /></div>
-              <div class="field"><label for="rm-date">Exam date</label><input class="input" id="rm-date" type="date" value="2026-12-08" disabled /></div>
-              <div class="field"><label for="rm-hours">Hours per day</label><input class="input" id="rm-hours" type="number" value="2" disabled /></div>
-              <div class="field"><label for="rm-level">Current level</label><select class="select" id="rm-level" disabled><option>Intermediate</option></select></div>
+          <form class="card rm-form section-gap" id="rm-form">
+            <div class="rm-form-grid">
+              <div class="field"><label for="rm-subject">Subject</label><input class="input" id="rm-subject" value="Discrete Mathematics" maxlength="60" required /></div>
+              <div class="field"><label for="rm-date">Exam date</label><input class="input" id="rm-date" type="date" value="2026-12-08" required /></div>
+              <div class="field"><label for="rm-hours">Hours per day</label><input class="input" id="rm-hours" type="number" min="0.5" max="12" step="0.5" value="2" required /></div>
+              <div class="field"><label for="rm-level">Current level</label><select class="select" id="rm-level"><option>Beginner</option><option selected>Intermediate</option><option>Advanced</option></select></div>
             </div>
-            <p class="muted small">Plan generation opens in an upcoming release. Plans will include weekly topics, ticked tasks, revision days before the exam and one-click links to flashcards and quizzes.</p>
-          </div>
+            <h3 class="section-h">Pick a plan style</h3>
+            <div class="tpl-cards tpl-cards-lg" id="roadmap-templates" role="group" aria-label="Roadmap templates"></div>
+            <div class="rm-form-foot">
+              <button class="btn btn-primary" type="submit">Build my plan</button>
+              <span class="muted small">Building a new plan replaces the current one.</span>
+            </div>
+          </form>
+          <div class="card plan-preview" id="roadmap-preview" aria-live="polite"></div>
         </section>
       </main>
     </div>
@@ -322,6 +342,6 @@
   <!-- One file picker shared by every "Upload syllabus" button -->
   <input type="file" id="syllabus-input" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" multiple hidden />
   <div class="toasts" id="toasts" aria-live="assertive"></div>
-  <script type="module" src="/assets/app.js"></script>
+  <script type="module" src="/assets/app.js?v=9"></script>
 </body>
 </html>
