@@ -221,4 +221,6 @@ __marimo__/
 
 # EduGuardian: the user database (accounts and logins) stays on the server only
 users.db
+# Syllabus files students upload (private, never commit them)
+backend/uploads/
 *.db

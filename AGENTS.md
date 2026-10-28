@@ -9,6 +9,8 @@ Continue from **PLAN.md**. Milestone 1 (the product surface) is done. Pick up th
 - `public/app.html`: workspace shell. Every view is a `<section data-view="…">`. Hash routing (`#home`, `#ask`, `#syllabus`, `#study`, `#roadmap`) lives in `route()` in `assets/app.js`.
 - `assets/app.js`: an ES module organised by screen (top bar, home, ask, flashcards, quiz).
 - `assets/fixtures.js`: **all sample data**. When adding real APIs, replace these exports or the functions that read them (`pickReply`, `loadDeck`, `startQuiz`, `renderHome`) instead of scattering fetch calls through the UI.
+- Syllabus uploads: `backend/syllabus.py` (`/syllabus` list, upload, delete). Files are sent as base64 JSON (no python-multipart needed), saved in `backend/uploads/<user id>/` (gitignored) and listed in `users.db`. One shared file picker (`#syllabus-input`) serves every `[data-upload-syllabus]` button.
+- Today's plan tasks are saved in the browser (`localStorage`, key `eduguardian_tasks`), seeded from `TODAY_TASKS` the first time.
 - Styles: `assets/styles.css` (tokens + shared components), `assets/site.css` (public pages), `assets/app.css` (workspace).
 
 ## Conventions

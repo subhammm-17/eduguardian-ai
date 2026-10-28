@@ -84,6 +84,23 @@
 .task-list label { flex: 1; font-size: 14px; cursor: pointer; }
 .task-list li.done label { color: var(--subtle); text-decoration: line-through; }
 .task-meta { font-size: 12.5px; color: var(--subtle); white-space: nowrap; }
+.task-del {
+  display: grid; place-items: center; flex: none;
+  width: 28px; height: 28px; margin-right: -6px;
+  border: 0; border-radius: var(--radius-sm); background: none;
+  color: var(--subtle); cursor: pointer;
+}
+.task-del svg { width: 15px; height: 15px; }
+.task-del:hover, .task-del:focus-visible { background: var(--danger-weak); color: var(--danger); }
+.task-empty { padding: 10px 20px; }
+.task-add { display: flex; align-items: center; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--border); }
+.task-add .input { height: 34px; font-size: 14px; }
+.task-add #task-title { flex: 1; min-width: 0; }
+.task-add .task-min { width: 72px; flex: none; }
+/* The ask bar at the bottom of Home, with clear space above it */
+.quick-ask { display: flex; gap: 8px; margin-top: 32px; padding: 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); }
+.quick-ask .input { flex: 1; min-width: 0; border-color: transparent; background: transparent; }
+.quick-ask:focus-within { border-color: var(--highlight); }
 .recent-list li { padding: 10px 20px; display: grid; gap: 2px; }
 .recent-list li + li { border-top: 1px solid var(--border); }
 .recent-list .q { font-size: 14px; }
@@ -164,6 +181,22 @@
 .dropzone strong { color: var(--text); font-size: 15px; }
 .dropzone span { max-width: 440px; }
 .planned-list { margin: 0; padding-left: 1.2em; color: var(--muted); font-size: 14px; display: grid; gap: 6px; }
+/* Syllabus uploads */
+.upload-card { padding: 24px; display: grid; gap: 20px; }
+.dropzone-btn { width: 100%; font: inherit; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.dropzone-btn:hover, .dropzone-btn.over { border-color: var(--highlight); background: color-mix(in srgb, var(--highlight) 6%, var(--surface-2)); }
+.dropzone-btn:disabled { opacity: 0.6; cursor: progress; }
+.upload-files { display: grid; gap: 8px; }
+.file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.file-list li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 8px 8px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.file-list li.muted { border-style: dashed; padding: 10px 14px; }
+.file-name { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.file-list .btn { margin-left: auto; }
+.syllabus-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; margin-bottom: 20px; }
+.syllabus-strip-text { display: grid; gap: 2px; min-width: 0; }
+.syllabus-strip-text strong { font-size: 14px; }
+.syllabus-strip .btn { gap: 6px; }
+.syllabus-strip .btn svg { width: 15px; height: 15px; }
 .planned-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 
 /* Study */

@@ -73,6 +73,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-radius: 4px;
 }
 
+/* Anything with the hidden attribute stays hidden, even when its class sets
+   display (e.g. .ask is flex). Without this, the Ask page showed under every page. */
+[hidden] { display: none !important; }
+
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
