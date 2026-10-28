@@ -84,6 +84,13 @@
 .task-list label { flex: 1; font-size: 14px; cursor: pointer; }
 .task-list li.done label { color: var(--subtle); text-decoration: line-through; }
 .task-meta { font-size: 12.5px; color: var(--subtle); white-space: nowrap; }
+.card-head-right { display: flex; align-items: center; gap: 10px; }
+.plan-menu { position: relative; }
+.plan-menu-btn { gap: 4px; padding: 0 8px; margin-right: -8px; }
+.plan-menu-btn svg { width: 14px; height: 14px; }
+.plan-pop { z-index: 10; min-width: 200px; }
+.task-list:not(.deleting) .task-del { display: none; }
+.task-list.deleting li { background: color-mix(in srgb, var(--danger-weak) 35%, transparent); }
 .task-del {
   display: grid; place-items: center; flex: none;
   width: 28px; height: 28px; margin-right: -6px;
@@ -320,6 +327,36 @@ kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border: 
 .plan-week { padding: 14px 16px; border: 1px solid var(--border); border-left: 3px solid var(--accent-bright); border-radius: var(--radius-sm); background: var(--bg); }
 .plan-week h4 { font-size: 13.5px; margin-bottom: 8px; color: var(--accent-text); }
 .plan-week ul { margin: 0; padding-left: 1.1em; display: grid; gap: 4px; font-size: 13.5px; color: var(--muted); }
+.plan-preview .plan-weeks { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+.page-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.page-head-row > div { flex: 1 1 420px; }
+.page-head-row .btn svg { width: 16px; height: 16px; }
+/* Roadmap */
+.rm-form { padding: 20px 24px; display: grid; gap: 16px; }
+.rm-form-grid { display: grid; grid-template-columns: 2fr 1.3fr 1fr 1.2fr; gap: 14px; }
+.rm-form-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rm-head p { margin-top: 2px; }
+.rm-countdown { padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--surface-2); color: var(--accent-text); white-space: nowrap; }
+.rm-countdown.soon { background: var(--danger-weak); color: var(--danger); }
+.rm-progress { display: grid; gap: 6px; }
+.plan-week { display: grid; gap: 6px; align-content: start; transition: border-color 0.15s; }
+.plan-week.complete { border-left-color: var(--success); }
+.plan-week-head { display: grid; gap: 2px; margin-bottom: 4px; }
+.plan-week-head h4 { margin-bottom: 0; }
+.plan-week .rm-tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rm-tasks li { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; font-size: 13.5px; }
+.rm-tasks input { width: 15px; height: 15px; margin-top: 3px; accent-color: var(--accent); flex: none; }
+.rm-tasks label { flex: 1; cursor: pointer; color: var(--text); }
+.rm-tasks li.done label { color: var(--subtle); text-decoration: line-through; }
+.rm-icon { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--subtle); cursor: pointer; opacity: 0.55; }
+.rm-icon svg { width: 14px; height: 14px; }
+.rm-tasks li:hover .rm-icon, .rm-icon:focus-visible { opacity: 1; }
+.rm-icon:hover { background: var(--surface-2); color: var(--accent-text); }
+.rm-del:hover { background: var(--danger-weak); color: var(--danger); }
+.rm-add { display: flex; gap: 6px; margin-top: 4px; }
+.rm-add .input { height: 30px; font-size: 13px; flex: 1; min-width: 0; padding: 0 8px; }
+.rm-add .btn { height: 30px; }
 
 /* ---------- Mobile: sidebar becomes a bottom tab bar ---------- */
 @media (max-width: 760px) {
@@ -344,7 +381,8 @@ kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border: 
   .composer-note { display: none; }
   .flashcard { height: 240px; }
   .face-text { font-size: 17px; }
-  .quiz-setup-grid, .planned-form { grid-template-columns: 1fr; }
+  .quiz-setup-grid, .planned-form, .rm-form-grid { grid-template-columns: 1fr; }
+  .rm-icon { opacity: 1; }
   .boxes { width: 100%; }
   .box { flex: 1; min-width: 0; }
   .kbd-help { display: none; }

@@ -341,6 +341,15 @@ def plot(req: PlotRequest, user=Depends(current_user)):
 # The backend also serves the pages in public/, so one server runs everything:
 # open http://127.0.0.1:8000 and you get the site. This must stay at the very end,
 # so the routes above (/auth, /ask, /hint, /plot, /syllabus, /health) are matched first.
+@app.middleware("http")
+async def always_fresh_pages(request, call_next):
+    """Tells the browser to check for a newer version of each page, style and script,
+    so after a `git pull` you see the new website without clearing the cache."""
+    response = await call_next(request)
+    response.headers.setdefault("Cache-Control", "no-cache")
+    return response
+
+
 PUBLIC_DIR = Path(__file__).resolve().parent.parent / "public"
 if PUBLIC_DIR.is_dir():
     app.mount("/", StaticFiles(directory=PUBLIC_DIR, html=True), name="website")

@@ -4,14 +4,14 @@
 // Sign-in, Ask, hints and graphs use the FastAPI backend (through api.js).
 // Syllabus uploads are saved by the backend too. Today's plan is saved in this browser.
 // The rest of Home, Study and Roadmap still use sample data from fixtures.js.
-import * as api from "./api.js";
+import * as api from "./api.js?v=9";
 import {
   SUBJECTS, MODELS, DASHBOARD, TODAY_TASKS, RECENT_QUESTIONS, SUGGESTIONS,
   HINT_LABELS, DECKS, QUIZ_BANK,
   QUIZ_HISTORY, REVIEWS_WEEK, PROMPT_TEMPLATES, QUIZ_TEMPLATES, ROADMAP_TEMPLATES,
-} from "./fixtures.js";
-import { figure, lineChart, barChart, wireCharts } from "./figures.js";
-import { circuitSvg } from "./circuits.js";
+} from "./fixtures.js?v=9";
+import { figure, lineChart, barChart, wireCharts } from "./figures.js?v=9";
+import { circuitSvg } from "./circuits.js?v=9";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -305,7 +305,7 @@ function renderHome() {
   const q = DASHBOARD.lastQuiz;
   $("#stat-quiz").textContent = `${q.score}/${q.total}`;
   $("#stat-quiz-meta").textContent = `${q.topic} · ${q.when}`;
-  const r = DASHBOARD.roadmap;
+  const r = roadmap ? roadmapStats() : DASHBOARD.roadmap;
   $("#stat-road").textContent = `${r.progress}%`;
   $("#stat-road-bar").style.width = `${r.progress}%`;
   $("#stat-road-meta").textContent = `${r.exam} · exam on ${r.examDate}`;
@@ -347,6 +347,13 @@ function saveTasks() {
   try { localStorage.setItem(TASKS_KEY, JSON.stringify(tasks)); } catch (e) {}
 }
 
+// Also used by the Roadmap's "+ Today" buttons
+function addTask(title, minutes = 30) {
+  tasks.push({ id: `t${Date.now()}${Math.floor(Math.random() * 1000)}`, title, minutes, done: false });
+  saveTasks();
+  renderTasks();
+}
+
 const ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
 function renderTasks() {
@@ -357,7 +364,7 @@ function renderTasks() {
       <label for="task-${t.id}">${escapeHtml(t.title)}</label>
       <span class="task-meta">${t.minutes} min</span>
       <button type="button" class="task-del" data-del="${t.id}" aria-label="Delete task: ${escapeHtml(t.title)}" title="Delete task">${ICON_X}</button>
-    </li>`).join("") : '<li class="task-empty muted small">No tasks yet. Add one below.</li>';
+    </li>`).join("") : '<li class="task-empty muted small">No tasks yet. Use Edit plan → Add a task.</li>';
   updateTaskCount();
 }
 
@@ -368,6 +375,7 @@ function updateTaskCount() {
 
 function initHome() {
   const list = $("#today-tasks");
+  const form = $("#task-add");
   list.addEventListener("change", (e) => {
     const task = tasks.find((t) => t.id === e.target.dataset.task);
     if (!task) return;
@@ -382,18 +390,51 @@ function initHome() {
     tasks = tasks.filter((t) => t.id !== b.dataset.del);
     saveTasks();
     renderTasks();
-    $("#task-title").focus();
+    if (!tasks.length) setDeleting(false);
   });
-  $("#task-add").addEventListener("submit", (e) => {
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
     const title = $("#task-title").value.trim();
     if (!title) return;
     const minutes = Math.min(600, Math.max(5, Math.round(Number($("#task-minutes").value) || 30)));
-    tasks.push({ id: `t${Date.now()}`, title, minutes, done: false });
-    saveTasks();
-    renderTasks();
+    addTask(title, minutes);
     $("#task-title").value = "";
     $("#task-title").focus();
+  });
+  $("#task-add-close").addEventListener("click", () => { form.hidden = true; });
+
+  // "Edit plan" drop-down menu: add a task, delete tasks, remove finished ones
+  const btn = $("#plan-menu-btn");
+  const pop = $("#plan-pop");
+  const close = () => { pop.hidden = true; btn.setAttribute("aria-expanded", "false"); };
+  const setDeleting = (on) => {
+    list.classList.toggle("deleting", on);
+    $('[data-plan-action="delete"]').textContent = on ? "Stop deleting" : "Delete tasks";
+  };
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    pop.hidden = !pop.hidden;
+    btn.setAttribute("aria-expanded", String(!pop.hidden));
+    if (!pop.hidden) $(".popover-item", pop).focus();
+  });
+  document.addEventListener("click", (e) => { if (!pop.contains(e.target)) close(); });
+  pop.addEventListener("keydown", (e) => { if (e.key === "Escape") { close(); btn.focus(); } });
+  pop.addEventListener("click", (e) => {
+    const action = e.target.closest("[data-plan-action]")?.dataset.planAction;
+    if (!action) return;
+    close();
+    if (action === "add") {
+      form.hidden = false;
+      $("#task-title").focus();
+    } else if (action === "delete") {
+      setDeleting(!list.classList.contains("deleting"));
+    } else if (action === "clear-done") {
+      const before = tasks.length;
+      tasks = tasks.filter((t) => !t.done);
+      saveTasks();
+      renderTasks();
+      toast(before === tasks.length ? "No finished tasks to remove" : `Removed ${before - tasks.length} finished ${before - tasks.length === 1 ? "task" : "tasks"}`);
+    }
   });
 
   // The ask bar at the bottom of Home: opens Ask and sends the question there
@@ -971,18 +1012,126 @@ function initStudy() {
   initFlashcards();
 }
 
-/* ---------- Roadmap templates ---------- */
+/* ---------- Roadmap ---------- */
 
-function showRoadmapTemplate(id) {
-  const t = ROADMAP_TEMPLATES.find((r) => r.id === id);
-  $$("[data-rtpl]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.rtpl === id)));
-  $("#rm-hours").value = t.hours;
-  $("#roadmap-preview").innerHTML = `
-    <div><h3 class="section-h">${escapeHtml(t.name)}</h3><p class="muted small">${escapeHtml(t.desc)} About ${t.hours} ${t.hours === 1 ? "hour" : "hours"} a day.</p></div>
-    <div class="plan-weeks">${t.weeks.map((w) => `
-      <div class="plan-week"><h4>${escapeHtml(w.title)}</h4>
-        <ul>${w.tasks.map((task) => `<li>${escapeHtml(task)}</li>`).join("")}</ul></div>`).join("")}
+// Your plan is saved in this browser (localStorage), like Today's plan.
+// { tpl, subject, examDate, hours, level, sections: [{ title, dates, tasks: [{ id, text, done }] }] }
+const ROADMAP_KEY = "eduguardian_roadmap";
+let roadmap = loadRoadmap();
+let roadmapTpl = roadmap?.tpl || ROADMAP_TEMPLATES[0].id;
+
+function loadRoadmap() {
+  try { return JSON.parse(localStorage.getItem(ROADMAP_KEY)) || null; } catch (e) { return null; }
+}
+
+function saveRoadmap() {
+  try { localStorage.setItem(ROADMAP_KEY, JSON.stringify(roadmap)); } catch (e) {}
+}
+
+const DAY = 24 * 3600 * 1000;
+const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const shortDate = (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+const longDate = (iso) => new Date(`${iso}T00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const daysUntil = (iso) => Math.round((new Date(`${iso}T00:00`) - startOfToday()) / DAY);
+let nextId = 0;
+const makeTasks = (texts) => texts.map((text) => ({ id: `r${Date.now()}${nextId++}`, text, done: false }));
+
+// Turns a template + your answers into a plan. The 2-week template stretches to
+// fit your exam date: learning weeks first, then a final practise-and-revise week.
+function buildRoadmap(tplId, { subject, examDate, hours, level }) {
+  const t = ROADMAP_TEMPLATES.find((r) => r.id === tplId);
+  let sections;
+  if (tplId === "two-week") {
+    const days = Math.max(1, daysUntil(examDate));
+    const weeks = Math.min(12, Math.max(1, Math.ceil(days / 7)));
+    const exam = new Date(`${examDate}T00:00`);
+    sections = Array.from({ length: weeks }, (_, i) => {
+      const last = i === weeks - 1;
+      const from = new Date(startOfToday().getTime() + i * 7 * DAY);
+      const to = last ? new Date(exam.getTime() - DAY) : new Date(from.getTime() + 6 * DAY);
+      const src = last ? t.weeks[1] : t.weeks[0];
+      return {
+        title: `Week ${i + 1} · ${last ? "Practise and revise" : "Learn"}`,
+        dates: `${shortDate(from)} – ${shortDate(to < from ? from : to)}`,
+        tasks: makeTasks(src.tasks),
+      };
+    });
+  } else {
+    sections = t.weeks.map((w) => ({ title: w.title, dates: "", tasks: makeTasks(w.tasks) }));
+  }
+  if (level === "Beginner") sections[0].tasks.unshift(...makeTasks([`Go through worked examples in ${subject} before practising`]));
+  if (level === "Advanced") sections.at(-1).tasks.push(...makeTasks(["Try the hardest past-paper questions"]));
+  return { tpl: tplId, subject, examDate, hours, level, sections };
+}
+
+function roadmapStats() {
+  const all = roadmap.sections.flatMap((s) => s.tasks);
+  const done = all.filter((t) => t.done).length;
+  return {
+    done, total: all.length,
+    progress: all.length ? Math.round((done / all.length) * 100) : 0,
+    exam: roadmap.subject, examDate: longDate(roadmap.examDate),
+  };
+}
+
+const ICON_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+
+function renderRoadmap() {
+  const box = $("#roadmap-preview");
+  if (!roadmap) { box.innerHTML = '<p class="muted">Fill in the form and press <strong>Build my plan</strong>.</p>'; return; }
+  const st = roadmapStats();
+  const days = daysUntil(roadmap.examDate);
+  const countdown = days > 1 ? `${days} days to go` : days === 1 ? "Exam is tomorrow" : days === 0 ? "Exam is today" : "Exam date has passed";
+  const tpl = ROADMAP_TEMPLATES.find((r) => r.id === roadmap.tpl);
+  box.innerHTML = `
+    <div class="rm-head">
+      <div>
+        <h3 class="section-h">${escapeHtml(roadmap.subject)} · ${escapeHtml(tpl?.name || "Plan")}</h3>
+        <p class="muted small">Exam on ${longDate(roadmap.examDate)} · ${roadmap.hours} ${Number(roadmap.hours) === 1 ? "hour" : "hours"} a day · ${escapeHtml(roadmap.level)}</p>
+      </div>
+      <span class="rm-countdown${days >= 0 && days <= 7 ? " soon" : ""}">${countdown}</span>
+    </div>
+    <div class="rm-progress">
+      <div class="progress" aria-hidden="true"><span style="width:${st.progress}%"></span></div>
+      <span class="small muted">${st.done} of ${st.total} tasks done · ${st.progress}%</span>
+    </div>
+    <div class="plan-weeks">${roadmap.sections.map((sec, si) => {
+      const doneHere = sec.tasks.filter((t) => t.done).length;
+      return `
+      <div class="plan-week${sec.tasks.length && doneHere === sec.tasks.length ? " complete" : ""}">
+        <div class="plan-week-head">
+          <h4>${escapeHtml(sec.title)}</h4>
+          <span class="small muted">${sec.dates ? `${escapeHtml(sec.dates)} · ` : ""}${doneHere}/${sec.tasks.length}</span>
+        </div>
+        <ul class="rm-tasks">${sec.tasks.map((t) => `
+          <li class="${t.done ? "done" : ""}">
+            <input type="checkbox" id="rm-${t.id}" data-rm-task="${t.id}" ${t.done ? "checked" : ""} />
+            <label for="rm-${t.id}">${escapeHtml(t.text)}</label>
+            <button type="button" class="rm-icon" data-rm-today="${t.id}" title="Add to today's plan" aria-label="Add to today's plan: ${escapeHtml(t.text)}">${ICON_PLUS}</button>
+            <button type="button" class="rm-icon rm-del" data-rm-del="${t.id}" title="Delete task" aria-label="Delete task: ${escapeHtml(t.text)}">${ICON_X}</button>
+          </li>`).join("")}
+        </ul>
+        <form class="rm-add" data-rm-add="${si}">
+          <label class="sr-only" for="rm-add-${si}">Add a task to ${escapeHtml(sec.title)}</label>
+          <input class="input" id="rm-add-${si}" placeholder="Add a task…" maxlength="120" autocomplete="off" />
+          <button class="btn btn-sm" type="submit">Add</button>
+        </form>
+      </div>`;
+    }).join("")}
     </div>`;
+}
+
+function findRoadmapTask(id) {
+  for (const sec of roadmap.sections) {
+    const task = sec.tasks.find((t) => t.id === id);
+    if (task) return { sec, task };
+  }
+  return {};
+}
+
+function selectRoadmapTpl(id) {
+  roadmapTpl = id;
+  $$("[data-rtpl]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.rtpl === id)));
 }
 
 function initRoadmap() {
@@ -993,9 +1142,79 @@ function initRoadmap() {
     </button>`).join("");
   wrap.addEventListener("click", (e) => {
     const b = e.target.closest("[data-rtpl]");
-    if (b) showRoadmapTemplate(b.dataset.rtpl);
+    if (!b) return;
+    selectRoadmapTpl(b.dataset.rtpl);
+    $("#rm-hours").value = ROADMAP_TEMPLATES.find((r) => r.id === b.dataset.rtpl).hours;
   });
-  showRoadmapTemplate(ROADMAP_TEMPLATES[0].id);
+
+  $("#rm-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const answers = {
+      subject: $("#rm-subject").value.trim() || "My subject",
+      examDate: $("#rm-date").value,
+      hours: Number($("#rm-hours").value) || 2,
+      level: $("#rm-level").value,
+    };
+    if (daysUntil(answers.examDate) < 1) return toast("Please pick an exam date after today.", "error");
+    if (roadmap && roadmapStats().done > 0 && !confirm("Build a new plan? Your ticked tasks in the current plan will be cleared.")) return;
+    roadmap = buildRoadmap(roadmapTpl, answers);
+    saveRoadmap();
+    renderRoadmap();
+    toast("Your plan is ready");
+  });
+
+  const box = $("#roadmap-preview");
+  box.addEventListener("change", (e) => {
+    const { task } = findRoadmapTask(e.target.dataset.rmTask);
+    if (!task) return;
+    task.done = e.target.checked;
+    saveRoadmap();
+    renderRoadmap();
+    $(`#rm-${task.id}`)?.focus();
+  });
+  box.addEventListener("click", (e) => {
+    const today = e.target.closest("[data-rm-today]");
+    const del = e.target.closest("[data-rm-del]");
+    if (today) {
+      const { task } = findRoadmapTask(today.dataset.rmToday);
+      if (task) { addTask(task.text, Math.round(((roadmap.hours || 2) * 60) / 3 / 5) * 5 || 30); toast("Added to today's plan on Home"); }
+    } else if (del) {
+      const { sec, task } = findRoadmapTask(del.dataset.rmDel);
+      if (!task) return;
+      sec.tasks = sec.tasks.filter((t) => t !== task);
+      saveRoadmap();
+      renderRoadmap();
+    }
+  });
+  box.addEventListener("submit", (e) => {
+    const form = e.target.closest("[data-rm-add]");
+    if (!form) return;
+    e.preventDefault();
+    const input = $("input", form);
+    const text = input.value.trim();
+    if (!text) return input.focus();
+    const si = Number(form.dataset.rmAdd);
+    roadmap.sections[si].tasks.push(...makeTasks([text]));
+    saveRoadmap();
+    renderRoadmap();
+    $(`#rm-add-${si}`).focus();
+  });
+
+  // Start from your saved plan, or build the first one for you
+  if (roadmap) {
+    $("#rm-subject").value = roadmap.subject;
+    $("#rm-date").value = roadmap.examDate;
+    $("#rm-hours").value = roadmap.hours;
+    $("#rm-level").value = roadmap.level;
+  } else if (daysUntil($("#rm-date").value) >= 1) {
+    roadmap = buildRoadmap(roadmapTpl, {
+      subject: $("#rm-subject").value, examDate: $("#rm-date").value,
+      hours: Number($("#rm-hours").value), level: $("#rm-level").value,
+    });
+    saveRoadmap();
+  }
+  selectRoadmapTpl(roadmapTpl);
+  renderRoadmap();
 }
 
 /* ---------- Syllabus uploads (Syllabus, Study and Roadmap pages) ---------- */

@@ -10,7 +10,9 @@ Continue from **PLAN.md**. Milestone 1 (the product surface) is done. Pick up th
 - `assets/app.js`: an ES module organised by screen (top bar, home, ask, flashcards, quiz).
 - `assets/fixtures.js`: **all sample data**. When adding real APIs, replace these exports or the functions that read them (`pickReply`, `loadDeck`, `startQuiz`, `renderHome`) instead of scattering fetch calls through the UI.
 - Syllabus uploads: `backend/syllabus.py` (`/syllabus` list, upload, delete). Files are sent as base64 JSON (no python-multipart needed), saved in `backend/uploads/<user id>/` (gitignored) and listed in `users.db`. One shared file picker (`#syllabus-input`) serves every `[data-upload-syllabus]` button.
-- Today's plan tasks are saved in the browser (`localStorage`, key `eduguardian_tasks`), seeded from `TODAY_TASKS` the first time.
+- Today's plan tasks are saved in the browser (`localStorage`, key `eduguardian_tasks`), seeded from `TODAY_TASKS` the first time. Add/delete live in the card's "Edit plan" drop-down.
+- Roadmap: `buildRoadmap()` turns a template + form answers into week sections (the 2-week template stretches to the exam date); ticks, added and deleted tasks are saved in `localStorage` (`eduguardian_roadmap`) and feed the Home "Roadmap progress" stat.
+- `app.html` loads CSS/JS with `?v=N` and the backend sends `Cache-Control: no-cache`, so a `git pull` shows up without clearing the browser cache. Bump N when changing assets.
 - Styles: `assets/styles.css` (tokens + shared components), `assets/site.css` (public pages), `assets/app.css` (workspace).
 
 ## Conventions
