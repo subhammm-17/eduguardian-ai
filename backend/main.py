@@ -17,6 +17,7 @@ from google.genai import types
 
 from auth import current_user, init_db, router as auth_router
 from plots import make_plot
+from syllabus import init_syllabus_db, router as syllabus_router
 
 # The host's own API keys, read from backend/.env (never sent to the browser, never logged).
 # backend/.env must contain two lines like:
@@ -29,6 +30,8 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 app = FastAPI(title="EduGuardian AI")
 app.include_router(auth_router)  # adds /auth/signup, /auth/login, /auth/logout, /auth/me
 init_db()  # creates backend/users.db the first time
+app.include_router(syllabus_router)  # adds /syllabus (upload, list and delete notes)
+init_syllabus_db()
 
 # Lets the website talk to this backend during development.
 # We will restrict this before deployment.
@@ -337,7 +340,7 @@ def plot(req: PlotRequest, user=Depends(current_user)):
 # ---------- The website ----------
 # The backend also serves the pages in public/, so one server runs everything:
 # open http://127.0.0.1:8000 and you get the site. This must stay at the very end,
-# so the routes above (/auth, /ask, /hint, /plot, /health) are matched first.
+# so the routes above (/auth, /ask, /hint, /plot, /syllabus, /health) are matched first.
 PUBLIC_DIR = Path(__file__).resolve().parent.parent / "public"
 if PUBLIC_DIR.is_dir():
     app.mount("/", StaticFiles(directory=PUBLIC_DIR, html=True), name="website")

@@ -120,6 +120,14 @@
                 <span class="muted small" id="today-count"></span>
               </div>
               <ul class="task-list" id="today-tasks"></ul>
+              <form class="task-add" id="task-add">
+                <label class="sr-only" for="task-title">New task</label>
+                <input class="input" id="task-title" placeholder="Add a task, e.g. Revise K-maps" maxlength="120" autocomplete="off" required />
+                <label class="sr-only" for="task-minutes">Minutes</label>
+                <input class="input task-min" id="task-minutes" type="number" min="5" max="600" step="5" value="30" title="Minutes" />
+                <span class="muted small" aria-hidden="true">min</span>
+                <button class="btn btn-sm" type="submit">Add</button>
+              </form>
             </div>
             <div class="card">
               <div class="card-head">
@@ -129,6 +137,11 @@
               <ul class="recent-list" id="recent"></ul>
             </div>
           </div>
+          <form class="quick-ask" id="quick-ask">
+            <label for="quick-q" class="sr-only">Ask a question</label>
+            <input class="input" id="quick-q" placeholder="Ask a question…" autocomplete="off" />
+            <button class="btn btn-primary" type="submit">Ask</button>
+          </form>
         </section>
 
         <!-- ASK -->
@@ -184,14 +197,18 @@
             <div class="info-box"><span class="info-num">2</span><h3>Ask about them</h3><p>Answers come only from your files, so they match what your course teaches.</p></div>
             <div class="info-box"><span class="info-num">3</span><h3>Check the source</h3><p>Every answer cites the file and page, such as [1] p. 4, so you can read it yourself.</p></div>
           </div>
-          <div class="card planned">
-            <div class="dropzone" aria-disabled="true">
+          <div class="card upload-card">
+            <button type="button" class="dropzone dropzone-btn" id="syllabus-drop" data-upload-syllabus>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-              <strong>Upload PDF or text notes</strong>
-              <span class="muted small">Note uploads open in the next release. Each upload will be split into sections, indexed and linked to the subject you choose.</span>
+              <strong>Upload syllabus or notes</strong>
+              <span class="muted small">PDF, .txt or .md, up to 10 MB. Click to choose files, or drop them here. They are saved under the subject chosen at the top.</span>
+            </button>
+            <div class="upload-files">
+              <h3 class="section-h">Your files</h3>
+              <ul class="file-list" id="syllabus-files"><li class="muted small">No files yet.</li></ul>
             </div>
             <ul class="planned-list">
-              <li><strong>Notes only</strong> or <strong>notes + general knowledge</strong> modes</li>
+              <li>Coming next: <strong>notes only</strong> or <strong>notes + general knowledge</strong> answers</li>
               <li>Clickable citations such as [1] that open the source snippet</li>
               <li>A clear "not in your notes" reply instead of guessing</li>
             </ul>
@@ -200,6 +217,13 @@
 
         <!-- STUDY -->
         <section data-view="study" hidden>
+          <div class="card syllabus-strip">
+            <div class="syllabus-strip-text">
+              <strong>Your syllabus</strong>
+              <span class="muted small" data-syllabus-summary>Upload your syllabus so flashcards and quizzes can follow it.</span>
+            </div>
+            <button class="btn btn-sm" type="button" data-upload-syllabus><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg><span>Upload syllabus</span></button>
+          </div>
           <div class="study-head">
             <div class="segmented" role="tablist" aria-label="Study tool">
               <button type="button" role="tab" id="tab-cards" aria-selected="true" aria-controls="panel-cards">Flashcards</button>
@@ -271,6 +295,13 @@
             <h2 class="page-title">Roadmap</h2>
             <p class="muted">A day-by-day study plan that fits before your exam date.</p>
           </div>
+          <div class="card syllabus-strip">
+            <div class="syllabus-strip-text">
+              <strong>Your syllabus</strong>
+              <span class="muted small" data-syllabus-summary>Upload your syllabus so your plan can follow it.</span>
+            </div>
+            <button class="btn btn-sm" type="button" data-upload-syllabus><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg><span>Upload syllabus</span></button>
+          </div>
           <h3 class="section-h">Start from a template</h3>
           <div class="tpl-cards tpl-cards-lg section-gap" id="roadmap-templates" role="group" aria-label="Roadmap templates"></div>
           <div class="card plan-preview section-gap" id="roadmap-preview" aria-live="polite"></div>
@@ -288,6 +319,8 @@
     </div>
   </div>
 
+  <!-- One file picker shared by every "Upload syllabus" button -->
+  <input type="file" id="syllabus-input" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" multiple hidden />
   <div class="toasts" id="toasts" aria-live="assertive"></div>
   <script type="module" src="/assets/app.js"></script>
 </body>

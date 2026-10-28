@@ -2,7 +2,8 @@
 // Screens: Home, Ask (Normal + Socratic), Study (Flashcards + Quiz), plus
 // Syllabus and Roadmap previews.
 // Sign-in, Ask, hints and graphs use the FastAPI backend (through api.js).
-// Home, Study, Syllabus and Roadmap still use sample data from fixtures.js.
+// Syllabus uploads are saved by the backend too. Today's plan is saved in this browser.
+// The rest of Home, Study and Roadmap still use sample data from fixtures.js.
 import * as api from "./api.js";
 import {
   SUBJECTS, MODELS, DASHBOARD, TODAY_TASKS, RECENT_QUESTIONS, SUGGESTIONS,
@@ -309,14 +310,7 @@ function renderHome() {
   $("#stat-road-bar").style.width = `${r.progress}%`;
   $("#stat-road-meta").textContent = `${r.exam} · exam on ${r.examDate}`;
 
-  const list = $("#today-tasks");
-  list.innerHTML = TODAY_TASKS.map((t) => `
-    <li class="${t.done ? "done" : ""}">
-      <input type="checkbox" id="task-${t.id}" data-task="${t.id}" ${t.done ? "checked" : ""} />
-      <label for="task-${t.id}">${escapeHtml(t.title)}</label>
-      <span class="task-meta">${t.minutes} min</span>
-    </li>`).join("");
-  updateTaskCount();
+  renderTasks();
 
   renderCharts();
 
@@ -334,18 +328,82 @@ function renderCharts() {
   wireCharts($('[data-view="home"]'));
 }
 
+/* ---------- Home: today's plan ---------- */
+
+// Your tasks are saved in this browser (localStorage), so added and deleted
+// tasks are still there after a refresh. The first time, the sample tasks are used.
+const TASKS_KEY = "eduguardian_tasks";
+let tasks = loadTasks();
+
+function loadTasks() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TASKS_KEY));
+    if (Array.isArray(saved)) return saved;
+  } catch (e) {}
+  return TODAY_TASKS.map((t) => ({ ...t }));
+}
+
+function saveTasks() {
+  try { localStorage.setItem(TASKS_KEY, JSON.stringify(tasks)); } catch (e) {}
+}
+
+const ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+
+function renderTasks() {
+  const list = $("#today-tasks");
+  list.innerHTML = tasks.length ? tasks.map((t) => `
+    <li class="${t.done ? "done" : ""}">
+      <input type="checkbox" id="task-${t.id}" data-task="${t.id}" ${t.done ? "checked" : ""} />
+      <label for="task-${t.id}">${escapeHtml(t.title)}</label>
+      <span class="task-meta">${t.minutes} min</span>
+      <button type="button" class="task-del" data-del="${t.id}" aria-label="Delete task: ${escapeHtml(t.title)}" title="Delete task">${ICON_X}</button>
+    </li>`).join("") : '<li class="task-empty muted small">No tasks yet. Add one below.</li>';
+  updateTaskCount();
+}
+
 function updateTaskCount() {
-  const done = TODAY_TASKS.filter((t) => t.done).length;
-  $("#today-count").textContent = `${done} of ${TODAY_TASKS.length} done`;
+  const done = tasks.filter((t) => t.done).length;
+  $("#today-count").textContent = tasks.length ? `${done} of ${tasks.length} done` : "";
 }
 
 function initHome() {
-  $("#today-tasks").addEventListener("change", (e) => {
-    const task = TODAY_TASKS.find((t) => t.id === e.target.dataset.task);
+  const list = $("#today-tasks");
+  list.addEventListener("change", (e) => {
+    const task = tasks.find((t) => t.id === e.target.dataset.task);
     if (!task) return;
     task.done = e.target.checked;
     e.target.closest("li").classList.toggle("done", task.done);
+    saveTasks();
     updateTaskCount();
+  });
+  list.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-del]");
+    if (!b) return;
+    tasks = tasks.filter((t) => t.id !== b.dataset.del);
+    saveTasks();
+    renderTasks();
+    $("#task-title").focus();
+  });
+  $("#task-add").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const title = $("#task-title").value.trim();
+    if (!title) return;
+    const minutes = Math.min(600, Math.max(5, Math.round(Number($("#task-minutes").value) || 30)));
+    tasks.push({ id: `t${Date.now()}`, title, minutes, done: false });
+    saveTasks();
+    renderTasks();
+    $("#task-title").value = "";
+    $("#task-title").focus();
+  });
+
+  // The ask bar at the bottom of Home: opens Ask and sends the question there
+  $("#quick-ask").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const text = $("#quick-q").value.trim();
+    if (!text) return $("#quick-q").focus();
+    $("#quick-q").value = "";
+    location.hash = "#ask";
+    ask(text);
   });
 }
 
@@ -940,6 +998,91 @@ function initRoadmap() {
   showRoadmapTemplate(ROADMAP_TEMPLATES[0].id);
 }
 
+/* ---------- Syllabus uploads (Syllabus, Study and Roadmap pages) ---------- */
+
+let syllabusFiles = [];
+
+function formatSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// Redraws the file list (Syllabus page) and the short summary (Study and Roadmap)
+function renderSyllabus() {
+  $("#syllabus-files").innerHTML = syllabusFiles.length ? syllabusFiles.map((f) => `
+    <li>
+      <span class="file-name">${escapeHtml(f.name)}</span>
+      <span class="muted small">${escapeHtml(subjectName(f.subject))} · ${formatSize(f.size)}</span>
+      <button type="button" class="btn btn-ghost btn-sm" data-del-file="${f.id}" aria-label="Delete ${escapeHtml(f.name)}">Delete</button>
+    </li>`).join("") : '<li class="muted small">No files yet.</li>';
+
+  const mine = syllabusFiles.filter((f) => f.subject === state.subject);
+  $$("[data-syllabus-summary]").forEach((el) => {
+    if (!el.dataset.empty) el.dataset.empty = el.textContent;
+    el.textContent = mine.length
+      ? `${subjectName(state.subject)}: ${mine.map((f) => f.name).slice(0, 2).join(", ")}${mine.length > 2 ? ` and ${mine.length - 2} more` : ""}`
+      : el.dataset.empty;
+  });
+}
+
+async function uploadFiles(fileList) {
+  const files = [...fileList];
+  if (!files.length) return;
+  $$("[data-upload-syllabus]").forEach((b) => (b.disabled = true));
+  let added = 0;
+  for (const file of files) {
+    try {
+      syllabusFiles.unshift(await api.uploadSyllabus(file, state.subject));
+      added++;
+    } catch (err) {
+      if (err.status === 401) return backToLogin();
+      toast(`${file.name}: ${err.message}`, "error");
+    }
+  }
+  $$("[data-upload-syllabus]").forEach((b) => (b.disabled = false));
+  renderSyllabus();
+  if (added) toast(`Uploaded ${added} ${added === 1 ? "file" : "files"} for ${subjectName(state.subject)}`);
+}
+
+function initSyllabus() {
+  const input = $("#syllabus-input");
+  $$("[data-upload-syllabus]").forEach((b) => b.addEventListener("click", () => input.click()));
+  input.addEventListener("change", () => {
+    uploadFiles(input.files);
+    input.value = ""; // so the same file can be chosen again
+  });
+
+  // Drag and drop onto the big box on the Syllabus page
+  const drop = $("#syllabus-drop");
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("over");
+    uploadFiles(e.dataTransfer.files);
+  });
+
+  $("#syllabus-files").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-del-file]");
+    if (!b) return;
+    const id = Number(b.dataset.delFile);
+    const file = syllabusFiles.find((f) => f.id === id);
+    if (!file || !confirm(`Delete "${file.name}"?`)) return;
+    try {
+      await api.deleteSyllabus(id);
+      syllabusFiles = syllabusFiles.filter((f) => f.id !== id);
+      renderSyllabus();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  });
+
+  $("#subject").addEventListener("change", renderSyllabus);
+  renderSyllabus();
+  api.listSyllabus().then((files) => { syllabusFiles = files; renderSyllabus(); }).catch(() => {});
+}
+
 /* ---------- Start ---------- */
 
 // The workspace is for signed-in students only.
@@ -955,6 +1098,7 @@ initHome();
 initAsk();
 initStudy();
 initRoadmap();
+initSyllabus();
 setMode("normal");
 window.addEventListener("hashchange", () => route(true));
 route(false);

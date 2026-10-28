@@ -118,3 +118,29 @@ export async function getHint({ subject, question, level, primary }) {
 export async function getPlot(question) {
   return (await call("/plot", { method: "POST", body: { question } })).json();
 }
+
+/* ---------- Syllabus files ---------- */
+
+// Reads a File from the file picker as base64 text, the form the backend expects.
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = () => reject(new ApiError("This file could not be read.", 0));
+    reader.readAsDataURL(file);
+  });
+}
+
+// Your uploaded files: [{ id, subject, name, size, uploaded_at }]
+export async function listSyllabus() {
+  return (await (await call("/syllabus")).json()).files;
+}
+
+export async function uploadSyllabus(file, subject) {
+  const data = await fileToBase64(file);
+  return (await call("/syllabus", { method: "POST", body: { subject, name: file.name, data } })).json();
+}
+
+export async function deleteSyllabus(id) {
+  await call(`/syllabus/${id}`, { method: "DELETE" });
+}
