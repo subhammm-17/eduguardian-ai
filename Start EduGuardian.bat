@@ -104,7 +104,8 @@ echo.
 REM Opens the browser in the background once the server answers
 start "" /b cmd /c ""%~f0" open"
 
-"venv\Scripts\python.exe" -m uvicorn main:app --port 8000
+REM --host 127.0.0.1 means only this computer can open the site (not others on the Wi-Fi)
+"venv\Scripts\python.exe" -m uvicorn main:app --host 127.0.0.1 --port 8000
 echo.
 echo EduGuardian AI has stopped. If you see an error above, it says what went wrong.
 pause

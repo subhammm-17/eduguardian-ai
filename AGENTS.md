@@ -22,6 +22,8 @@ Continue from **PLAN.md**. Milestone 1 (the product surface) is done. Pick up th
 - Tables and diagrams in answers: the model writes Markdown tables, ```logic blocks (Boolean equations, drawn as gate circuits by `assets/circuits.js`) and ```mermaid blocks (flowcharts, loaded from a pinned CDN only when needed). ```figure blocks (e.g. `bloch theta=90 phi=0 label=|+⟩`) are drawn by `answerFigure()` in `assets/figures.js`; Mermaid blocks that try to show a Bloch sphere are swapped for that figure, and Mermaid that still fails folds into a short "couldn't be drawn" note. The rules live in `FORMAT_RULES` in `backend/main.py`. Never let the model draw ASCII art.
 - Accessibility: labelled controls, visible focus, keyboard shortcuts on flashcards (Space, arrow keys, 1–4), and a bottom tab bar below 760px.
 - Short, plain comments that a beginner can follow.
+- Security lives in `backend/security.py` (rate limits, security headers incl. a Content Security Policy, request size limit, CORS origins, `scrub()` for error text). The CSP blocks inline `<script>` blocks and `on…=` attributes, and only allows scripts from our own server and `cdn.jsdelivr.net`: put page code in `public/assets/*.js`, and add an `integrity` hash when adding a CDN `<script>`. Keep `netlify.toml` headers in step with `security.py`.
+- The backend picks the AI models (`GEMINI_MODEL` / `GROQ_MODEL` in `backend/.env`, else the defaults in `main.py`); requests naming any other model are refused so nobody can spend the host's credit on expensive models. `/docs` is off unless `EDUGUARDIAN_DOCS=1`.
 
 ## Non-obvious decisions
 - Socratic mode is a toggle inside Ask, not a separate nav item. This keeps the sidebar to five entries.

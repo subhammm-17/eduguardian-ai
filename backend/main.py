@@ -3,20 +3,23 @@ import json
 import os
 import time
 from pathlib import Path
+from typing import Literal
 
 import httpx
 from dotenv import load_dotenv
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from google import genai
 from google.genai import types
 
 from auth import current_user, init_db, router as auth_router
 from plots import make_plot
+from security import (LOCAL_ORIGINS, BodySizeLimit, RateLimit, add_security_headers,
+                      extra_origins, scrub)
 from syllabus import init_syllabus_db, router as syllabus_router
 
 # The host's own API keys, read from backend/.env (never sent to the browser, never logged).
@@ -27,21 +30,32 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 
-app = FastAPI(title="EduGuardian AI")
+# The /docs test page is off unless you turn it on, so strangers can't browse every route.
+# To use it while developing, add EDUGUARDIAN_DOCS=1 to backend/.env and restart.
+SHOW_DOCS = os.getenv("EDUGUARDIAN_DOCS", "") == "1"
+app = FastAPI(
+    title="EduGuardian AI",
+    debug=False,  # never show error details (code and file paths) to visitors
+    docs_url="/docs" if SHOW_DOCS else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if SHOW_DOCS else None,
+)
 app.include_router(auth_router)  # adds /auth/signup, /auth/login, /auth/logout, /auth/me
 init_db()  # creates backend/users.db the first time
 app.include_router(syllabus_router)  # adds /syllabus (upload, list and delete notes)
 init_syllabus_db()
 
-# Lets the website talk to this backend during development.
-# We will restrict this before deployment.
+# CORS: which other websites may call this backend from a browser.
+# Only pages on this computer, plus any listed in ALLOWED_ORIGINS in backend/.env (see security.py).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origin_regex=LOCAL_ORIGINS,
+    allow_origins=extra_origins(),
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
     expose_headers=["X-Answered-By"],  # lets the page see which model actually answered
 )
+app.add_middleware(BodySizeLimit)  # refuses requests over 15 MB
 
 # One instruction per subject (this is where subject-specific behaviour starts)
 SUBJECT_PROMPTS = {
@@ -104,33 +118,65 @@ FAST_CONFIG = types.GenerateContentConfig(
 )
 
 
+# Size limits, so nobody can send a whole book and spend the host's AI credit
+MAX_QUESTION = 4000   # characters
+MAX_TURN = 8000       # one earlier message (answers can be long)
+
+
 class Turn(BaseModel):
-    role: str      # "user" or "assistant"
+    role: Literal["user", "assistant", "ai"]
     content: str
 
+    @field_validator("content")
+    @classmethod
+    def shorten(cls, text):
+        # Long earlier answers are cut, not refused, so the chat keeps working
+        return text if len(text) <= MAX_TURN else text[:MAX_TURN] + " …"
 
-# Default model names, used when the page doesn't send its own
-DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
-DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+
+# Model names. The page doesn't choose them: the host does, here or in backend/.env
+# (GEMINI_MODEL=... and GROQ_MODEL=...). Otherwise anyone could pick the most
+# expensive model and spend the host's money.
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "").strip() or "gemini-3.8-flash"
+DEFAULT_GROQ_MODEL = os.getenv("GROQ_MODEL", "").strip() or "openai/gpt-oss-120b"
+ALLOWED_GEMINI_MODELS = {DEFAULT_GEMINI_MODEL}
+ALLOWED_GROQ_MODELS = {DEFAULT_GROQ_MODEL, "llama-3.3-70b-versatile"}
 
 
 class AskRequest(BaseModel):
-    subject: str
-    question: str
+    subject: str = Field(max_length=40)
+    question: str = Field(min_length=1, max_length=MAX_QUESTION)
     model: str = DEFAULT_GEMINI_MODEL          # Gemini model
     backup_model: str = DEFAULT_GROQ_MODEL     # Groq model
-    primary: str = "gemini"       # which one answers first: "gemini" or "groq" (the other is the backup)
+    primary: Literal["gemini", "groq"] = "gemini"  # which one answers first (the other is the backup)
     mode: str = "normal"          # "normal" or "socratic"
-    history: list[Turn] = []      # the last few messages of this chat (optional)
+    history: list[Turn] = Field(default=[], max_length=20)  # the last few messages of this chat (optional)
 
 
 class HintRequest(BaseModel):
-    subject: str
-    question: str
+    subject: str = Field(max_length=40)
+    question: str = Field(min_length=1, max_length=MAX_QUESTION)
     level: int = 1                # 1, 2 or 3
     model: str = DEFAULT_GEMINI_MODEL
     backup_model: str = DEFAULT_GROQ_MODEL
-    primary: str = "gemini"
+    primary: Literal["gemini", "groq"] = "gemini"
+
+
+def check_models(req):
+    """Only the host's chosen models may be used."""
+    if req.model not in ALLOWED_GEMINI_MODELS or req.backup_model not in ALLOWED_GROQ_MODELS:
+        raise HTTPException(status_code=400, detail="That model isn't available on this server.")
+
+
+# How many AI answers one student can ask for (each one costs the host's free credit)
+ASK_PER_MINUTE = RateLimit(15, 60, "You're asking very fast. Please wait a minute and try again.")
+ASK_PER_DAY = RateLimit(300, 24 * 3600, "You've reached today's limit of answers. Please come back tomorrow.")
+PLOTS_PER_MINUTE = RateLimit(30, 60, "Too many graphs at once. Please wait a minute and try again.")
+
+
+def count_ai_call(user):
+    ASK_PER_MINUTE.hit(user["id"])
+    ASK_PER_DAY.hit(user["id"])
 
 
 def build_prompt(subject, question, mode="normal", history=(), extra=""):
@@ -150,7 +196,7 @@ def build_prompt(subject, question, mode="normal", history=(), extra=""):
 
 
 class PlotRequest(BaseModel):
-    question: str
+    question: str = Field(max_length=MAX_QUESTION)
 
 
 @app.get("/health")
@@ -171,6 +217,8 @@ def ask(req: AskRequest, user=Depends(current_user)):
         raise HTTPException(status_code=400, detail="Unknown subject")
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=503, detail="The server has no GEMINI_API_KEY in backend/.env yet.")
+    check_models(req)
+    count_ai_call(user)
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
@@ -181,7 +229,7 @@ def ask(req: AskRequest, user=Depends(current_user)):
         return {"subject": req.subject, "model": req.model, "mode": req.mode, "answer": response.text}
     except Exception as e:
         # Never log or return the key itself
-        raise HTTPException(status_code=502, detail=f"Model error: {str(e)[:300]}")
+        raise HTTPException(status_code=502, detail=f"Model error: {scrub(e)[:300]}")
 
 
 # ---------- Backup provider (Groq) ----------
@@ -262,7 +310,7 @@ def start_answer(req, prompt):
         if isinstance(e, concurrent.futures.TimeoutError):
             reason = f"no answer after {GEMINI_WAIT_SECONDS}s"
         else:
-            reason = str(e)[:300]
+            reason = scrub(e)[:300]
 
     b_name, b_key, b_model, b_starter = backup
     if not b_key:
@@ -271,7 +319,7 @@ def start_answer(req, prompt):
     try:
         first, rest = b_starter(b_key, b_model, prompt)
     except Exception as e2:
-        raise HTTPException(status_code=502, detail=f"Main model: {reason} | Backup model: {str(e2)[:300]}")
+        raise HTTPException(status_code=502, detail=f"Main model: {reason} | Backup model: {scrub(e2)[:300]}")
     return first, rest, b_model
 
 
@@ -285,6 +333,8 @@ def ask_stream(req: AskRequest, user=Depends(current_user)):
         raise HTTPException(status_code=400, detail="Unknown subject")
     if not GEMINI_API_KEY and not GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="The server has no API keys in backend/.env yet.")
+    check_models(req)
+    count_ai_call(user)
 
     start = time.time()
     prompt = build_prompt(req.subject, req.question, req.mode, req.history)
@@ -321,13 +371,15 @@ def hint(req: HintRequest, user=Depends(current_user)):
         raise HTTPException(status_code=400, detail="Hint level must be 1, 2 or 3")
     if not GEMINI_API_KEY and not GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="The server has no API keys in backend/.env yet.")
+    check_models(req)
+    count_ai_call(user)
 
     prompt = build_prompt(req.subject, req.question, "socratic", extra=HINT_RULES[req.level])
     first, rest, answered_by = start_answer(req, prompt)
     try:
         text = first + "".join(rest)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Model error: {str(e)[:300]}")
+        raise HTTPException(status_code=502, detail=f"Model error: {scrub(e)[:300]}")
     return {"level": req.level, "hint": text, "answered_by": answered_by}
 
 
@@ -335,6 +387,7 @@ def hint(req: HintRequest, user=Depends(current_user)):
 def plot(req: PlotRequest, user=Depends(current_user)):
     """Draws a graph for a maths question with SymPy + matplotlib (no AI, no API key needed).
     Returns {"image": None} when there is nothing to draw, e.g. "What is a matrix?"."""
+    PLOTS_PER_MINUTE.hit(user["id"])
     try:
         result = make_plot(req.question)
     except Exception as e:
@@ -348,11 +401,11 @@ def plot(req: PlotRequest, user=Depends(current_user)):
 # open http://127.0.0.1:8000 and you get the site. This must stay at the very end,
 # so the routes above (/auth, /ask, /hint, /plot, /syllabus, /health) are matched first.
 @app.middleware("http")
-async def always_fresh_pages(request, call_next):
-    """Tells the browser to check for a newer version of each page, style and script,
-    so after a `git pull` you see the new website without clearing the cache."""
+async def security_headers(request: Request, call_next):
+    """Adds the security headers from security.py to every reply, and tells the
+    browser to check for a newer version of each page, style and script."""
     response = await call_next(request)
-    response.headers.setdefault("Cache-Control", "no-cache")
+    add_security_headers(request, response)
     return response
 
 
