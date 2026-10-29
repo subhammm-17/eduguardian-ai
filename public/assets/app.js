@@ -4,14 +4,14 @@
 // Sign-in, Ask, hints and graphs use the FastAPI backend (through api.js).
 // Syllabus uploads are saved by the backend too. Today's plan is saved in this browser.
 // The rest of Home, Study and Roadmap still use sample data from fixtures.js.
-import * as api from "./api.js?v=11";
+import * as api from "./api.js?v=12";
 import {
   SUBJECTS, MODELS, DASHBOARD, TODAY_TASKS, RECENT_QUESTIONS, SUGGESTIONS,
   HINT_LABELS, DECKS, QUIZ_BANK,
   QUIZ_HISTORY, REVIEWS_WEEK, PROMPT_TEMPLATES, QUIZ_TEMPLATES, ROADMAP_TEMPLATES,
-} from "./fixtures.js?v=11";
-import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=11";
-import { circuitSvg } from "./circuits.js?v=11";
+} from "./fixtures.js?v=12";
+import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=12";
+import { circuitSvg } from "./circuits.js?v=12";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -131,7 +131,7 @@ function cutUnfinishedDiagram(text) {
 // drawings, ```figure blocks become our own SVG figures (like the Bloch sphere),
 // and ```mermaid blocks wait for drawMermaid() (they need a library).
 function tablesAndDiagrams(html) {
-  if (!/<table|language-(logic|mermaid|figure)/.test(html)) return html;
+  if (!/<table|<pre/.test(html)) return html;
   const tpl = document.createElement("template");
   tpl.innerHTML = html;
   tpl.content.querySelectorAll("table").forEach((t) => {
@@ -156,7 +156,11 @@ function tablesAndDiagrams(html) {
     fig.innerHTML = svgHtml; // built by figures.js, which escapes the label
     code.parentElement.replaceWith(fig);
   });
-  tpl.content.querySelectorAll("pre > code.language-mermaid").forEach((code) => {
+  // The model sometimes forgets to write "mermaid" after the ```, so any code
+  // block that starts like a flowchart (graph TD, flowchart LR, ...) counts too.
+  const isMermaid = (code) => code.classList.contains("language-mermaid") ||
+    (!/language-(logic|figure)/.test(code.className) && /^\s*(graph|flowchart)\s+(TD|TB|BT|LR|RL)\b/.test(code.textContent));
+  [...tpl.content.querySelectorAll("pre > code")].filter(isMermaid).forEach((code) => {
     // Mermaid can't draw a 3-D sphere, so a "Bloch sphere" flowchart becomes our real drawing
     if (looksLikeBloch(code.textContent)) {
       const fig = document.createElement("figure");
