@@ -9,7 +9,10 @@ if "%~1"=="open" goto open_when_ready
 
 REM Already running from an earlier double-click? Then just open the website.
 curl -s -o nul http://127.0.0.1:8000/health && (
+  echo EduGuardian AI is already running in another window, so I only opened the website.
+  echo To load a new version, close that other window first, then double-click this file again.
   start "" http://127.0.0.1:8000
+  timeout /t 10
   exit /b 0
 )
 
