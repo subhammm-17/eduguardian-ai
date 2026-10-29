@@ -4,14 +4,14 @@
 // Sign-in, Ask, hints and graphs use the FastAPI backend (through api.js).
 // Syllabus uploads are saved by the backend too. Today's plan is saved in this browser.
 // The rest of Home, Study and Roadmap still use sample data from fixtures.js.
-import * as api from "./api.js?v=10";
+import * as api from "./api.js?v=11";
 import {
   SUBJECTS, MODELS, DASHBOARD, TODAY_TASKS, RECENT_QUESTIONS, SUGGESTIONS,
   HINT_LABELS, DECKS, QUIZ_BANK,
   QUIZ_HISTORY, REVIEWS_WEEK, PROMPT_TEMPLATES, QUIZ_TEMPLATES, ROADMAP_TEMPLATES,
-} from "./fixtures.js?v=10";
-import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=10";
-import { circuitSvg } from "./circuits.js?v=10";
+} from "./fixtures.js?v=11";
+import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=11";
+import { circuitSvg } from "./circuits.js?v=11";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -561,6 +561,17 @@ async function addPlot(msg, question) {
   }
 }
 
+// Questions about the Bloch sphere always get the drawing, even when the
+// model forgot to write a ```figure block (or wrote plain text instead).
+function addBlochIfMissing(prose, question, answer) {
+  if (prose.querySelector(".figure-box")) return;
+  if (!/bloch/i.test(question) && !/bloch/i.test(answer || "")) return;
+  const fig = document.createElement("figure");
+  fig.className = "diagram figure-box";
+  fig.innerHTML = answerFigure("bloch") + `<figcaption>The Bloch sphere: |0⟩ at the top, |1⟩ at the bottom, and a state |ψ⟩ at angles θ and φ.</figcaption>`;
+  prose.append(fig);
+}
+
 async function ask(text) {
   if (state.busy || !text.trim()) return;
   state.busy = true;
@@ -605,6 +616,7 @@ async function ask(text) {
     state.history.push({ role: "ai", text: answer, socratic });
     // Graphs appear only in Normal mode, where giving the answer is allowed.
     if (!socratic && subject === "maths") await addPlot(msg, text);
+    if (subject === "quantum") addBlochIfMissing(prose, text, answer);
   } catch (err) {
     if (err.status === 401) return backToLogin();
     msg.innerHTML = `<div class="msg-meta"><span class="badge">Error</span></div><div class="prose"><p>${escapeHtml(err.message)}</p></div>`;
