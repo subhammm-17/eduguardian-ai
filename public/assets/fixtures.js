@@ -1,6 +1,8 @@
-// Sample data for the workspace preview.
-// Every screen reads from this one module, so later milestones can swap each
-// export for a real API call (see PLAN.md) without touching the UI code.
+// Ready-made content for the workspace: subjects, suggestions, templates,
+// starter flashcard decks and practice quiz questions.
+// Your own data (chats, plan, roadmap, scores) is NOT here: it is saved on the
+// server for each account (backend/chats.py and backend/study.py), so a new
+// account starts empty instead of showing made-up numbers.
 
 export const SUBJECTS = [
   { id: "maths", name: "Mathematics" },
@@ -11,38 +13,6 @@ export const SUBJECTS = [
 export const MODELS = [
   { id: "gemini", label: "Gemini", backup: "Groq" },
   { id: "groq", label: "Groq", backup: "Gemini" },
-];
-
-export const DASHBOARD = {
-  cardsDue: 14,
-  lastQuiz: { score: 8, total: 10, topic: "Boolean algebra", when: "2 days ago" },
-  roadmap: { progress: 42, exam: "Discrete Mathematics", examDate: "8 Dec 2026", daysLeft: 42 },
-};
-
-// Home charts. Quiz scores are percentages, oldest first.
-export const QUIZ_HISTORY = [
-  { label: "8 Sep", value: 50 }, { label: "15 Sep", value: 60 }, { label: "22 Sep", value: 55 },
-  { label: "29 Sep", value: 70 }, { label: "6 Oct", value: 65 }, { label: "13 Oct", value: 75 },
-  { label: "20 Oct", value: 72 }, { label: "25 Oct", value: 80 },
-];
-
-// Flashcards reviewed on each of the last seven days. `today` marks the current day.
-export const REVIEWS_WEEK = [
-  { label: "Wed", value: 18 }, { label: "Thu", value: 24 }, { label: "Fri", value: 9 },
-  { label: "Sat", value: 0 }, { label: "Sun", value: 31 }, { label: "Mon", value: 22 },
-  { label: "Tue", value: 6, today: true },
-];
-
-export const TODAY_TASKS = [
-  { id: "t1", title: "Read notes: eigenvalues and eigenvectors", type: "Read notes", minutes: 40, done: true },
-  { id: "t2", title: "Practice: 6 characteristic polynomial problems", type: "Practice", minutes: 45, done: false },
-  { id: "t3", title: "Review flashcards: Linear algebra", type: "Flashcards", minutes: 15, done: false },
-];
-
-export const RECENT_QUESTIONS = [
-  { subject: "Mathematics", text: "Differentiate x² · sin(x)", when: "Today" },
-  { subject: "Digital logic", text: "Simplify A·B + A·B' using Boolean laws", when: "Yesterday" },
-  { subject: "Quantum computing", text: "What does a Hadamard gate do to |0⟩?", when: "Mon" },
 ];
 
 // Suggested prompts shown in the empty Ask screen.

@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/assets/styles.css?v=15" />
-  <link rel="stylesheet" href="/assets/app.css?v=15" />
+  <link rel="stylesheet" href="/assets/styles.css?v=16" />
+  <link rel="stylesheet" href="/assets/app.css?v=16" />
 </head>
 <body>
   <a href="#view" class="sr-only">Skip to content</a>
@@ -93,6 +93,26 @@
           </div>
         </div>
 
+        <!-- Study progress: today's plan, quizzes and flashcards (backend/study.py) -->
+        <div class="stats">
+          <div class="card stat">
+            <span class="stat-label">Today's plan</span>
+            <span class="stat-value" id="c-tasks">–</span>
+            <div class="progress" aria-hidden="true"><span id="c-tasks-bar" style="width:0"></span></div>
+            <span class="muted small" id="c-tasks-meta"></span>
+          </div>
+          <div class="card stat">
+            <span class="stat-label">Quizzes this week</span>
+            <span class="stat-value" id="c-quizzes">0</span>
+            <span class="muted small" id="c-quizzes-meta"></span>
+          </div>
+          <div class="card stat">
+            <span class="stat-label">Flashcards reviewed this week</span>
+            <span class="stat-value" id="c-cards">0</span>
+            <span class="muted small">Cards practised in Study</span>
+          </div>
+        </div>
+
         <div class="chart-grid">
           <div class="card">
             <div class="card-head">
@@ -123,6 +143,6 @@
   </div>
 
   <div class="toasts" id="toasts" aria-live="assertive"></div>
-  <script type="module" src="/assets/parent.js?v=15"></script>
+  <script type="module" src="/assets/parent.js?v=16"></script>
 </body>
 </html>

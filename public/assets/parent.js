@@ -1,8 +1,9 @@
 // Parent dashboard (parent.html).
 // A parent links a child with a one-time code, sees their progress,
-// and chooses how the AI answers them. All of it lives in backend/family.py.
-import * as api from "./api.js?v=15";
-import { barChart, wireCharts } from "./figures.js?v=15";
+// and chooses how the AI answers them. All of it lives in backend/family.py
+// (the plan, quiz and flashcard numbers come from backend/study.py).
+import * as api from "./api.js?v=16";
+import { barChart, wireCharts } from "./figures.js?v=16";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -102,6 +103,19 @@ function renderChild(c) {
   $("#c-road-meta").textContent = r
     ? `${r.done} of ${r.total} tasks${r.subject ? ` · ${r.subject}` : ""}${r.exam_date ? ` · exam on ${new Date(`${r.exam_date}T00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}`
     : "No study roadmap made yet";
+
+  // Study progress, saved by the child's workspace
+  const st = c.study;
+  $("#c-tasks").textContent = st.tasks_total ? `${st.tasks_done}/${st.tasks_total}` : "–";
+  $("#c-tasks-bar").style.width = `${st.tasks_total ? Math.round((st.tasks_done / st.tasks_total) * 100) : 0}%`;
+  $("#c-tasks-meta").textContent = st.tasks_total ? "tasks done" : "No tasks in their plan yet";
+  $("#c-quizzes").textContent = st.quizzes_week;
+  const lastQuiz = st.quizzes[0];
+  $("#c-quizzes-meta").textContent = [
+    st.quiz_average_week !== null ? `Average ${st.quiz_average_week}%` : "",
+    lastQuiz ? `Last: ${lastQuiz.topic} ${lastQuiz.score}/${lastQuiz.total} (${ago(lastQuiz.at)})` : "No quizzes yet",
+  ].filter(Boolean).join(" · ");
+  $("#c-cards").textContent = st.cards_week;
 
   const days = perDay(c.week_times);
   const max = Math.max(4, Math.ceil(Math.max(...days.map((d) => d.value)) / 4) * 4); // steps of 4 give whole-number grid lines
