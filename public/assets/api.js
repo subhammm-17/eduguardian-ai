@@ -47,7 +47,12 @@ async function errorFrom(res) {
   const data = await res.json().catch(() => ({}));
   let message = `Something went wrong (error ${res.status}).`;
   if (typeof data.detail === "string") message = data.detail;
-  else if (Array.isArray(data.detail)) message = "Please fill in every field.";
+  else if (Array.isArray(data.detail)) {
+    // The backend refused the form. Say why in plain words.
+    message = data.detail.some((d) => d.type === "string_too_long")
+      ? "That is too long. Please make it shorter."
+      : "Please fill in every field.";
+  }
   return new ApiError(message, res.status);
 }
 

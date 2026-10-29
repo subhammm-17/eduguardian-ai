@@ -55,16 +55,39 @@ def _clean(question):
     return text.strip()
 
 
+# Powers must stay small. Something like 9^9^9 has hundreds of millions of digits:
+# working it out would freeze the whole server, so we refuse it before SymPy tries.
+MAX_POWER = 100
+
+
+def _small_powers(expr):
+    """True if every power in a not-yet-worked-out formula has a small exponent."""
+    for node in sp.postorder_traversal(expr):  # inner parts first, so they are already checked
+        if isinstance(node, sp.Pow) and not node.exp.free_symbols:
+            try:
+                if abs(complex(sp.N(node.exp))) > MAX_POWER:
+                    return False
+            except (TypeError, ValueError):
+                return False
+    return True
+
+
 def _parse(text, allow_number=False):
     """Parse a formula safely. Returns a SymPy expression, or None."""
     if not text or len(text) > 120:
         return None
     if not re.fullmatch(r"[0-9a-zA-Z+\-*/^().,\s]+", text):
         return None
+    if re.search(r"\d{16,}", text):  # no giant numbers
+        return None
     for word in re.findall(r"[A-Za-z]+", text):
         if word.lower() not in ALLOWED_WORDS:
             return None
     try:
+        # First read it without working anything out, to check the powers are small
+        raw = parse_expr(text.lower(), local_dict=dict(SAFE_NAMES), transformations=TRANSFORMS, evaluate=False)
+        if not _small_powers(raw):
+            return None
         expr = parse_expr(text.lower(), local_dict=dict(SAFE_NAMES), transformations=TRANSFORMS)
     except Exception:
         return None

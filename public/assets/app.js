@@ -4,14 +4,14 @@
 // Sign-in, Ask, hints and graphs use the FastAPI backend (through api.js).
 // Syllabus uploads are saved by the backend too. Today's plan is saved in this browser.
 // The rest of Home, Study and Roadmap still use sample data from fixtures.js.
-import * as api from "./api.js?v=12";
+import * as api from "./api.js?v=13";
 import {
   SUBJECTS, MODELS, DASHBOARD, TODAY_TASKS, RECENT_QUESTIONS, SUGGESTIONS,
   HINT_LABELS, DECKS, QUIZ_BANK,
   QUIZ_HISTORY, REVIEWS_WEEK, PROMPT_TEMPLATES, QUIZ_TEMPLATES, ROADMAP_TEMPLATES,
-} from "./fixtures.js?v=12";
-import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=12";
-import { circuitSvg } from "./circuits.js?v=12";
+} from "./fixtures.js?v=13";
+import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=13";
+import { circuitSvg } from "./circuits.js?v=13";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -404,10 +404,10 @@ function renderTasks() {
   const list = $("#today-tasks");
   list.innerHTML = tasks.length ? tasks.map((t) => `
     <li class="${t.done ? "done" : ""}">
-      <input type="checkbox" id="task-${t.id}" data-task="${t.id}" ${t.done ? "checked" : ""} />
-      <label for="task-${t.id}">${escapeHtml(t.title)}</label>
-      <span class="task-meta">${t.minutes} min</span>
-      <button type="button" class="task-del" data-del="${t.id}" aria-label="Delete task: ${escapeHtml(t.title)}" title="Delete task">${ICON_X}</button>
+      <input type="checkbox" id="task-${escapeHtml(t.id)}" data-task="${escapeHtml(t.id)}" ${t.done ? "checked" : ""} />
+      <label for="task-${escapeHtml(t.id)}">${escapeHtml(t.title)}</label>
+      <span class="task-meta">${escapeHtml(t.minutes)} min</span>
+      <button type="button" class="task-del" data-del="${escapeHtml(t.id)}" aria-label="Delete task: ${escapeHtml(t.title)}" title="Delete task">${ICON_X}</button>
     </li>`).join("") : '<li class="task-empty muted small">No tasks yet. Use Edit plan → Add a task.</li>';
   updateTaskCount();
 }
@@ -1143,7 +1143,7 @@ function renderRoadmap() {
     <div class="rm-head">
       <div>
         <h3 class="section-h">${escapeHtml(roadmap.subject)} · ${escapeHtml(tpl?.name || "Plan")}</h3>
-        <p class="muted small">Exam on ${longDate(roadmap.examDate)} · ${roadmap.hours} ${Number(roadmap.hours) === 1 ? "hour" : "hours"} a day · ${escapeHtml(roadmap.level)}</p>
+        <p class="muted small">Exam on ${longDate(roadmap.examDate)} · ${escapeHtml(roadmap.hours)} ${Number(roadmap.hours) === 1 ? "hour" : "hours"} a day · ${escapeHtml(roadmap.level)}</p>
       </div>
       <span class="rm-countdown${days >= 0 && days <= 7 ? " soon" : ""}">${countdown}</span>
     </div>
@@ -1161,10 +1161,10 @@ function renderRoadmap() {
         </div>
         <ul class="rm-tasks">${sec.tasks.map((t) => `
           <li class="${t.done ? "done" : ""}">
-            <input type="checkbox" id="rm-${t.id}" data-rm-task="${t.id}" ${t.done ? "checked" : ""} />
-            <label for="rm-${t.id}">${escapeHtml(t.text)}</label>
-            <button type="button" class="rm-icon" data-rm-today="${t.id}" title="Add to today's plan" aria-label="Add to today's plan: ${escapeHtml(t.text)}">${ICON_PLUS}</button>
-            <button type="button" class="rm-icon rm-del" data-rm-del="${t.id}" title="Delete task" aria-label="Delete task: ${escapeHtml(t.text)}">${ICON_X}</button>
+            <input type="checkbox" id="rm-${escapeHtml(t.id)}" data-rm-task="${escapeHtml(t.id)}" ${t.done ? "checked" : ""} />
+            <label for="rm-${escapeHtml(t.id)}">${escapeHtml(t.text)}</label>
+            <button type="button" class="rm-icon" data-rm-today="${escapeHtml(t.id)}" title="Add to today's plan" aria-label="Add to today's plan: ${escapeHtml(t.text)}">${ICON_PLUS}</button>
+            <button type="button" class="rm-icon rm-del" data-rm-del="${escapeHtml(t.id)}" title="Delete task" aria-label="Delete task: ${escapeHtml(t.text)}">${ICON_X}</button>
           </li>`).join("")}
         </ul>
         <form class="rm-add" data-rm-add="${si}">
@@ -1289,7 +1289,7 @@ function renderSyllabus() {
     <li>
       <span class="file-name">${escapeHtml(f.name)}</span>
       <span class="muted small">${escapeHtml(subjectName(f.subject))} · ${formatSize(f.size)}</span>
-      <button type="button" class="btn btn-ghost btn-sm" data-del-file="${f.id}" aria-label="Delete ${escapeHtml(f.name)}">Delete</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-del-file="${escapeHtml(f.id)}" aria-label="Delete ${escapeHtml(f.name)}">Delete</button>
     </li>`).join("") : '<li class="muted small">No files yet.</li>';
 
   const mine = syllabusFiles.filter((f) => f.subject === state.subject);

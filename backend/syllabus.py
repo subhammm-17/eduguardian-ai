@@ -19,15 +19,17 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from auth import _db, current_user
+from security import RateLimit
 
 UPLOAD_DIR = Path(__file__).with_name("uploads")
 MAX_BYTES = 10 * 1024 * 1024   # 10 MB per file
 MAX_FILES = 30                 # per student, so the disk can't fill up
 ALLOWED = {".pdf", ".txt", ".md"}
 SUBJECTS = {"maths", "digital_logic", "quantum"}
+UPLOADS_PER_USER = RateLimit(30, 60 * 60, "Too many uploads. Please try again in an hour.")
 
 router = APIRouter(prefix="/syllabus", tags=["syllabus"])
 
@@ -54,9 +56,9 @@ def _public(row):
 
 
 class UploadRequest(BaseModel):
-    subject: str
-    name: str
-    data: str  # the file's bytes, as base64 text
+    subject: str = Field(max_length=40)
+    name: str = Field(max_length=255)
+    data: str = Field(max_length=(MAX_BYTES * 4) // 3 + 8)  # the file's bytes, as base64 text
 
 
 @router.get("")
@@ -70,6 +72,7 @@ def list_files(user=Depends(current_user)):
 
 @router.post("")
 def upload(req: UploadRequest, user=Depends(current_user)):
+    UPLOADS_PER_USER.hit(user["id"])
     if req.subject not in SUBJECTS:
         raise HTTPException(status_code=400, detail="Unknown subject.")
     # Keep only the file name, with safe characters (no folders like ../)
