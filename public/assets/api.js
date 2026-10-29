@@ -72,8 +72,9 @@ async function call(path, { method = "GET", body } = {}) {
 
 /* ---------- Accounts ---------- */
 
-export async function signup(name, email, password) {
-  const data = await (await call("/auth/signup", { method: "POST", body: { name, email, password } })).json();
+// role is "student" or "parent"
+export async function signup(name, email, password, role = "student") {
+  const data = await (await call("/auth/signup", { method: "POST", body: { name, email, password, role } })).json();
   saveLogin(data.token, data.user);
   return data.user;
 }
@@ -102,6 +103,8 @@ export async function me() {
 export async function askStream(body, onText) {
   const res = await call("/ask/stream", { method: "POST", body });
   const answeredBy = res.headers.get("X-Answered-By") || "";
+  // "guided" when a parent turned on hint mode for this student
+  const mode = res.headers.get("X-Answer-Mode") || body.mode;
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let text = "";
@@ -111,7 +114,7 @@ export async function askStream(body, onText) {
     text += decoder.decode(value, { stream: true });
     onText(text);
   }
-  return { text, answeredBy };
+  return { text, answeredBy, mode };
 }
 
 // One rung of the hint ladder. level is 1, 2 or 3.
@@ -148,4 +151,43 @@ export async function uploadSyllabus(file, subject) {
 
 export async function deleteSyllabus(id) {
   await call(`/syllabus/${id}`, { method: "DELETE" });
+}
+
+/* ---------- Parental controls (backend/family.py) ---------- */
+
+// For students: { answer_mode: "hints" | "direct" | null, parents: [names] }
+export async function familyStatus() {
+  return (await call("/family/me")).json();
+}
+
+// For students: a one-time code to give to a parent. { code, minutes }
+export async function makeParentCode() {
+  return (await call("/family/code", { method: "POST" })).json();
+}
+
+// For students: send roadmap progress so linked parents can see it.
+export async function saveProgress(progress) {
+  await call("/family/progress", { method: "POST", body: progress });
+}
+
+// For parents
+export async function linkChild(code) {
+  return (await call("/family/link", { method: "POST", body: { code } })).json();
+}
+
+export async function listChildren() {
+  return (await (await call("/family/children")).json()).children;
+}
+
+export async function childDetails(id) {
+  return (await call(`/family/children/${id}`)).json();
+}
+
+// answerMode is "hints" or "direct"
+export async function setAnswerMode(id, answerMode) {
+  return (await call(`/family/children/${id}/mode`, { method: "POST", body: { answer_mode: answerMode } })).json();
+}
+
+export async function unlinkChild(id) {
+  await call(`/family/children/${id}`, { method: "DELETE" });
 }

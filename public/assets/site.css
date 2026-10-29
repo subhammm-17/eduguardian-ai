@@ -71,6 +71,8 @@
 .auth-card h1 { font-size: 22px; margin-bottom: 6px; }
 .auth-form { display: grid; gap: 16px; margin-top: 24px; }
 .auth-switch { margin-top: 20px; text-align: center; font-size: 14px; color: var(--muted); }
+.role-pick { display: flex; }
+.role-pick button { flex: 1; }
 .auth-switch button { background: none; border: 0; color: var(--accent-text); cursor: pointer; padding: 0; font-weight: 500; }
 
 @media (max-width: 900px) {

@@ -4,14 +4,16 @@
 // Sign-in, Ask, hints and graphs use the FastAPI backend (through api.js).
 // Syllabus uploads are saved by the backend too. Today's plan is saved in this browser.
 // The rest of Home, Study and Roadmap still use sample data from fixtures.js.
-import * as api from "./api.js?v=13";
+// Parental controls: a linked parent can turn on hint mode (checked by the server),
+// and roadmap progress is sent to the backend so the parent dashboard can show it.
+import * as api from "./api.js?v=14";
 import {
   SUBJECTS, MODELS, DASHBOARD, TODAY_TASKS, RECENT_QUESTIONS, SUGGESTIONS,
   HINT_LABELS, DECKS, QUIZ_BANK,
   QUIZ_HISTORY, REVIEWS_WEEK, PROMPT_TEMPLATES, QUIZ_TEMPLATES, ROADMAP_TEMPLATES,
-} from "./fixtures.js?v=13";
-import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=13";
-import { circuitSvg } from "./circuits.js?v=13";
+} from "./fixtures.js?v=14";
+import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=14";
+import { circuitSvg } from "./circuits.js?v=14";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -26,6 +28,7 @@ const state = {
   history: [], // { role: "user" | "ai", text } — the last few are sent with each question
   hintLevel: 0,
   busy: false,
+  hintLocked: false, // true when a parent turned on hint mode
 };
 
 /* ---------- Helpers ---------- */
@@ -497,6 +500,7 @@ function initHome() {
 const MODE_DESC = {
   normal: "Full explanations with worked solutions.",
   socratic: "Guiding questions and hints. The final answer is never given.",
+  guided: "Your parent turned on hint mode: you get the idea, hints and partial steps, and you finish the last step.",
 };
 
 function renderSuggestions() {
@@ -507,7 +511,11 @@ function renderSuggestions() {
 function setMode(mode) {
   state.mode = mode;
   $$("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
-  $("#mode-desc").textContent = MODE_DESC[mode];
+  // In hint mode the "Normal" button becomes "Hint mode": the server never sends full answers
+  const guided = state.hintLocked && mode === "normal";
+  $('[data-mode="normal"]').textContent = state.hintLocked ? "Hint mode" : "Normal";
+  $("#hint-lock").hidden = !state.hintLocked;
+  $("#mode-desc").textContent = MODE_DESC[guided ? "guided" : mode];
   $("#hints").hidden = mode !== "socratic";
   $("#question").placeholder = mode === "socratic" ? "Describe the problem or share your reasoning…" : "Ask a question…";
 }
@@ -524,9 +532,10 @@ function addUserMessage(text) {
   $("#thread").append(el);
 }
 
-function metaBadges({ socratic, verified, by }) {
+function metaBadges({ socratic, guided, verified, by }) {
   let html = `<span class="badge">${subjectName(state.subject)}</span>`;
   if (socratic) html += `<span class="badge badge-accent">Socratic</span>`;
+  if (guided) html += `<span class="badge badge-warn" title="Set by your parent">Hint mode</span>`;
   if (verified) html += `<span class="badge badge-success" title="Result checked with the SymPy solver">${ICON_CHECK}Verified</span>`;
   return html + `<span class="by">Answered by ${escapeHtml(modelLabel(by))}</span>`;
 }
@@ -597,7 +606,7 @@ async function ask(text) {
 
   let prose = null;
   try {
-    const { text: answer, answeredBy } = await api.askStream(
+    const { text: answer, answeredBy, mode } = await api.askStream(
       { subject, question: text, mode: state.mode, primary: state.model, history },
       (soFar) => {
         // First words arrived: swap the skeleton for the answer area
@@ -616,10 +625,13 @@ async function ask(text) {
     prose.innerHTML = rich(answer || "*(The model sent an empty answer. Please try again.)*");
     drawMermaid(prose);
     // Verified stays off until answer checking with SymPy is added (PLAN.md, milestone 4).
-    $(".msg-meta", msg).innerHTML = metaBadges({ socratic, verified: false, by: answeredBy });
-    state.history.push({ role: "ai", text: answer, socratic });
+    // The server says "guided" when a parent turned on hint mode (even if this page didn't know yet)
+    const guided = mode === "guided";
+    if (guided && !state.hintLocked) { state.hintLocked = true; setMode(state.mode); }
+    $(".msg-meta", msg).innerHTML = metaBadges({ socratic, guided, verified: false, by: answeredBy });
+    state.history.push({ role: "ai", text: answer, socratic: socratic || guided });
     // Graphs appear only in Normal mode, where giving the answer is allowed.
-    if (!socratic && subject === "maths") await addPlot(msg, text);
+    if (!socratic && !guided && subject === "maths") await addPlot(msg, text);
     if (subject === "quantum") addBlochIfMissing(prose, text, answer);
   } catch (err) {
     if (err.status === 401) return backToLogin();
@@ -1082,6 +1094,20 @@ function loadRoadmap() {
 
 function saveRoadmap() {
   try { localStorage.setItem(ROADMAP_KEY, JSON.stringify(roadmap)); } catch (e) {}
+  syncProgress();
+}
+
+// Sends roadmap progress to the backend so a linked parent can see it.
+// Waits a second after the last tick, so ticking five tasks sends one update.
+let syncTimer = null;
+function syncProgress() {
+  clearTimeout(syncTimer);
+  if (!roadmap) return;
+  syncTimer = setTimeout(() => {
+    const r = roadmapStats();
+    api.saveProgress({ percent: r.progress, done: r.done, total: r.total, subject: roadmap.subject || "", exam_date: roadmap.examDate || "" })
+      .catch(() => {}); // the plan still works in this browser if this fails
+  }, 1000);
 }
 
 const DAY = 24 * 3600 * 1000;
@@ -1358,10 +1384,58 @@ function initSyllabus() {
   api.listSyllabus().then((files) => { syllabusFiles = files; renderSyllabus(); }).catch(() => {});
 }
 
+/* ---------- Parent link (account menu) ---------- */
+
+function renderParents(parents) {
+  $("#family-parents").innerHTML = parents.length
+    ? `<p class="small">Linked parents: <strong>${parents.map(escapeHtml).join(", ")}</strong></p>`
+    : `<p class="small muted">No parent is linked yet.</p>`;
+}
+
+// Asks the backend whether a parent turned on hint mode, and who is linked.
+async function loadFamily() {
+  try {
+    const f = await api.familyStatus();
+    state.hintLocked = f.answer_mode === "hints";
+    renderParents(f.parents);
+    setMode(state.mode);
+  } catch (e) {
+    // Not a problem: the server still applies hint mode to every answer
+  }
+}
+
+function initFamily() {
+  const dialog = $("#family-dialog");
+  $("#parent-link-btn").addEventListener("click", () => {
+    $("#user-pop").hidden = true;
+    $("#family-code").hidden = true;
+    dialog.showModal();
+    loadFamily();
+  });
+  $("#family-close").addEventListener("click", () => dialog.close());
+  $("#family-make").addEventListener("click", async () => {
+    const btn = $("#family-make");
+    btn.disabled = true;
+    try {
+      const data = await api.makeParentCode();
+      $("#family-code-value").textContent = data.code;
+      $("#family-minutes").textContent = data.minutes;
+      $("#family-code").hidden = false;
+      btn.textContent = "Make a new code";
+    } catch (err) {
+      if (err.status === 401) return backToLogin();
+      toast(err.message, "error");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 /* ---------- Start ---------- */
 
-// The workspace is for signed-in students only.
+// The workspace is for signed-in students only. Parents have their own dashboard.
 if (!api.getToken()) backToLogin();
+if (api.getUser()?.role === "parent") location.replace("/parent.html");
 // Check the saved login is still valid (it lasts 7 days). Runs in the background.
 api.me().catch((err) => {
   if (err.status === 401) backToLogin();
@@ -1374,6 +1448,9 @@ initAsk();
 initStudy();
 initRoadmap();
 initSyllabus();
+initFamily();
 setMode("normal");
+loadFamily();
+syncProgress(); // so a parent sees the roadmap even before the next tick
 window.addEventListener("hashchange", () => route(true));
 route(false);

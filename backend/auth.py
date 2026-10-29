@@ -13,6 +13,8 @@ How it works:
 3. Every /ask request checks the token first. No valid token, no answer.
    This protects the host's API keys: only logged-in users can spend them.
 4. Rate limits (see security.py) stop anyone from guessing passwords quickly.
+5. Every account is either a "student" or a "parent" (see family.py for
+   how a parent links to a student and sets how the AI answers them).
 """
 import hashlib
 import hmac
@@ -24,6 +26,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from security import RateLimit, client_ip
@@ -76,6 +80,11 @@ def init_db():
                 user_id INTEGER NOT NULL REFERENCES users(id),
                 expires_at INTEGER NOT NULL
             )""")
+        # Older databases were made before parent accounts existed: add the column.
+        # Everyone who signed up before this is a student.
+        columns = [row["name"] for row in conn.execute("PRAGMA table_info(users)")]
+        if "role" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'student'")
 
 
 # ---------- Passwords and tokens ----------
@@ -120,7 +129,7 @@ def current_user(authorization: str = Header(default="")):
         raise HTTPException(status_code=401, detail="Please log in first.")
     with _db() as conn:
         row = conn.execute(
-            """SELECT users.id, users.name, users.email FROM sessions
+            """SELECT users.id, users.name, users.email, users.role FROM sessions
                JOIN users ON users.id = sessions.user_id
                WHERE sessions.token_hash = ? AND sessions.expires_at > ?""",
             (_token_hash(token), int(time.time())),
@@ -136,6 +145,7 @@ class SignupRequest(BaseModel):
     name: str = Field(max_length=80)
     email: str = Field(max_length=254)
     password: str = Field(max_length=MAX_PASSWORD_LENGTH)
+    role: Literal["student", "parent"] = "student"
 
 
 class LoginRequest(BaseModel):
@@ -165,11 +175,11 @@ def signup(req: SignupRequest, request: Request):
         if conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
             raise HTTPException(status_code=409, detail="An account with this email already exists. Please log in.")
         cur = conn.execute(
-            "INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
-            (name, email, hash_password(req.password), int(time.time())),
+            "INSERT INTO users (name, email, password_hash, created_at, role) VALUES (?, ?, ?, ?, ?)",
+            (name, email, hash_password(req.password), int(time.time()), req.role),
         )
         token = _new_session(conn, cur.lastrowid)
-    return {"token": token, "user": {"name": name, "email": email}}
+    return {"token": token, "user": {"name": name, "email": email, "role": req.role}}
 
 
 @router.post("/login")
@@ -178,14 +188,14 @@ def login(req: LoginRequest, request: Request):
     LOGIN_PER_IP.hit(client_ip(request))
     LOGIN_PER_EMAIL.hit(email)
     with _db() as conn:
-        row = conn.execute("SELECT id, name, password_hash FROM users WHERE email = ?", (email,)).fetchone()
+        row = conn.execute("SELECT id, name, role, password_hash FROM users WHERE email = ?", (email,)).fetchone()
         # Same message (and the same wait) for "no such email" and "wrong password",
         # so nobody can use this page to find out who has an account.
         ok = check_password(req.password, row["password_hash"] if row else _DUMMY_HASH)
         if row is None or not ok:
             raise HTTPException(status_code=401, detail="Email or password is incorrect.")
         token = _new_session(conn, row["id"])
-    return {"token": token, "user": {"name": row["name"], "email": email}}
+    return {"token": token, "user": {"name": row["name"], "email": email, "role": row["role"]}}
 
 
 @router.post("/logout")
@@ -199,4 +209,4 @@ def logout(authorization: str = Header(default="")):
 
 @router.get("/me")
 def me(user=Depends(current_user)):
-    return {"name": user["name"], "email": user["email"]}
+    return {"name": user["name"], "email": user["email"], "role": user["role"]}

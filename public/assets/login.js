@@ -1,16 +1,20 @@
 // Sign-in / sign-up form.
 // Accounts live in the FastAPI backend (backend/auth.py, saved in backend/users.db).
-import { getToken, signup, login } from "./api.js";
+import { getToken, getUser, signup, login } from "./api.js";
+
+// Students go to the workspace, parents to the parent dashboard
+const homeFor = (user) => (user?.role === "parent" ? "/parent.html" : "/app.html");
 
 (function () {
   // Already signed in? Go straight to the workspace.
   if (getToken()) {
-    location.replace("/app.html");
+    location.replace(homeFor(getUser()));
     return;
   }
 
   const params = new URLSearchParams(location.search);
   let mode = params.get("mode") === "signup" ? "signup" : "login";
+  let role = params.get("role") === "parent" ? "parent" : "student";
 
   const el = (id) => document.getElementById(id);
   const form = el("auth-form");
@@ -20,9 +24,12 @@ import { getToken, signup, login } from "./api.js";
     const signup = mode === "signup";
     el("auth-title").textContent = signup ? "Create your account" : "Sign in";
     el("auth-sub").textContent = signup
-      ? "Use your university email to get started."
+      ? (role === "parent" ? "Create a parent account to follow your child's learning." : "Use your university email to get started.")
       : "Welcome back. Continue where you left off.";
     el("name-field").hidden = !signup;
+    el("role-field").hidden = !signup;
+    document.querySelectorAll("[data-role]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.role === role)));
+    el("email-label").textContent = signup && role === "student" ? "University email" : "Email";
     el("pw-hint").hidden = !signup;
     el("password").autocomplete = signup ? "new-password" : "current-password";
     el("auth-submit").textContent = signup ? "Create account" : "Sign in";
@@ -33,6 +40,11 @@ import { getToken, signup, login } from "./api.js";
   }
 
   document.addEventListener("click", (e) => {
+    if (e.target.matches("[data-role]")) {
+      role = e.target.dataset.role;
+      render();
+      return;
+    }
     if (e.target.matches("[data-switch]")) {
       mode = mode === "signup" ? "login" : "signup";
       render();
@@ -63,9 +75,8 @@ import { getToken, signup, login } from "./api.js";
     button.textContent = mode === "signup" ? "Creating account…" : "Signing in…";
     error.hidden = true;
     try {
-      if (mode === "signup") await signup(name, email, password);
-      else await login(email, password);
-      location.href = "/app.html";
+      const user = mode === "signup" ? await signup(name, email, password, role) : await login(email, password);
+      location.href = homeFor(user);
     } catch (err) {
       error.textContent = err.message;
       error.hidden = false;

@@ -26,12 +26,20 @@
         <p class="muted small" id="auth-sub">Welcome back. Continue where you left off.</p>
 
         <form class="auth-form" id="auth-form" novalidate>
+          <div class="field" id="role-field" hidden>
+            <span class="label" id="role-label">I am a</span>
+            <div class="segmented role-pick" role="group" aria-labelledby="role-label">
+              <button type="button" data-role="student" aria-pressed="true">Student</button>
+              <button type="button" data-role="parent" aria-pressed="false">Parent</button>
+            </div>
+            <span class="hint" id="role-hint">Parents can follow a student's progress and choose how the AI answers them.</span>
+          </div>
           <div class="field" id="name-field" hidden>
             <label for="name">Full name</label>
             <input class="input" id="name" name="name" autocomplete="name" />
           </div>
           <div class="field">
-            <label for="email">University email</label>
+            <label for="email" id="email-label">Email</label>
             <input class="input" id="email" name="email" type="email" autocomplete="email" required />
           </div>
           <div class="field">
