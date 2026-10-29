@@ -28,6 +28,10 @@ netlify dev
 
 Then open the URL it prints. Any static file server pointed at `public/` also works.
 
+## Put it online
+
+See [DEPLOY.md](./DEPLOY.md): free hosting on Render, with a free Neon database so accounts survive restarts.
+
 ## Roadmap
 
 See [PLAN.md](./PLAN.md). The next milestones are accounts, the tutoring API with Socratic safety checks, answer verification, syllabus chat (RAG), generated flashcards and quizzes, and the roadmap builder.

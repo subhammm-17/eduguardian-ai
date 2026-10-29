@@ -1,8 +1,8 @@
 // Parent dashboard (parent.html).
 // A parent links a child with a one-time code, sees their progress,
 // and chooses how the AI answers them. All of it lives in backend/family.py.
-import * as api from "./api.js?v=14";
-import { barChart, wireCharts } from "./figures.js?v=14";
+import * as api from "./api.js?v=15";
+import { barChart, wireCharts } from "./figures.js?v=15";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];

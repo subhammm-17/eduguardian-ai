@@ -14,6 +14,8 @@ Continue from **PLAN.md**. Milestone 1 (the product surface) is done. Pick up th
 - Today's plan tasks are saved in the browser (`localStorage`, key `eduguardian_tasks`), seeded from `TODAY_TASKS` the first time. Add/delete live in the card's "Edit plan" drop-down.
 - Roadmap: `buildRoadmap()` turns a template + form answers into week sections (the 2-week template stretches to the exam date); ticks, added and deleted tasks are saved in `localStorage` (`eduguardian_roadmap`) and feed the Home "Roadmap progress" stat.
 - `app.html` loads CSS/JS with `?v=N` and the backend sends `Cache-Control: no-cache`, so a `git pull` shows up without clearing the browser cache. Bump N when changing assets.
+- Database: `backend/db.py`. SQLite (`backend/users.db`) locally; Postgres when `DATABASE_URL` is set (online, on Neon). Write SQLite-style SQL with `?` and `with _db() as conn:`; db.py translates for Postgres. Use `RETURNING id` instead of `cursor.lastrowid`, `add_column()` for migrations, and index rows (`row[0]`) instead of unpacking them. Uploaded files live in the database (`syllabus_files.content`), not on disk, because free hosts wipe their disk.
+- Hosting: Render free web service from `render.yaml` (guide: `DEPLOY.md`). `EDUGUARDIAN_HOSTED=1` drops localhost from CORS/CSP and adds HSTS; `CLIENT_IP_HEADER=CF-Connecting-IP` gives rate limits the real visitor IP. Secrets (`GEMINI_API_KEY`, `GROQ_API_KEY`, `DATABASE_URL`) are only in Render's Environment page.
 - Styles: `assets/styles.css` (tokens + shared components), `assets/site.css` (public pages), `assets/app.css` (workspace).
 
 ## Conventions

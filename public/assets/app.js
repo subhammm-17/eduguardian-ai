@@ -6,14 +6,14 @@
 // The rest of Home, Study and Roadmap still use sample data from fixtures.js.
 // Parental controls: a linked parent can turn on hint mode (checked by the server),
 // and roadmap progress is sent to the backend so the parent dashboard can show it.
-import * as api from "./api.js?v=14";
+import * as api from "./api.js?v=15";
 import {
   SUBJECTS, MODELS, DASHBOARD, TODAY_TASKS, RECENT_QUESTIONS, SUGGESTIONS,
   HINT_LABELS, DECKS, QUIZ_BANK,
   QUIZ_HISTORY, REVIEWS_WEEK, PROMPT_TEMPLATES, QUIZ_TEMPLATES, ROADMAP_TEMPLATES,
-} from "./fixtures.js?v=14";
-import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=14";
-import { circuitSvg } from "./circuits.js?v=14";
+} from "./fixtures.js?v=15";
+import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=15";
+import { circuitSvg } from "./circuits.js?v=15";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];

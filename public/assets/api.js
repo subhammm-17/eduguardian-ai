@@ -3,9 +3,11 @@
 // API keys stay on the server: the browser only keeps a login token.
 
 // Where the backend is running.
-// When the backend itself serves these pages (Start EduGuardian.bat), it's the same address,
-// so "" is enough. Otherwise (e.g. a separate test server) use the usual uvicorn address.
-export const API_BASE = location.port === "8000" ? "" : "http://127.0.0.1:8000";
+// When the backend itself serves these pages (Start EduGuardian.bat, or the online site),
+// it's the same address, so "" is enough. Only a separate test server on this computer
+// (a different port) needs the usual uvicorn address.
+const ON_THIS_COMPUTER = ["127.0.0.1", "localhost"].includes(location.hostname);
+export const API_BASE = ON_THIS_COMPUTER && location.port !== "8000" ? "http://127.0.0.1:8000" : "";
 
 // The login token is kept in this browser (localStorage) so you stay signed in
 // after closing the tab. It is NOT an API key: it only proves who you are to our backend.

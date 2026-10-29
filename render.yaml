@@ -1,0 +1,30 @@
+# Render "Blueprint": tells render.com how to run EduGuardian AI online.
+# Step-by-step guide: DEPLOY.md
+services:
+  - type: web
+    name: eduguardian-ai
+    runtime: python
+    plan: free
+    region: singapore       # the closest Render region to India
+    branch: main            # every push (merged pull request) to main updates the site
+    autoDeploy: true
+    buildCommand: pip install -r backend/requirements.txt
+    # One server runs everything: the backend also serves the pages in public/
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # Stricter online rules (HTTPS only, no localhost addresses): see backend/security.py
+      - key: EDUGUARDIAN_HOSTED
+        value: "1"
+      # The visitor's real address, for the rate limits (Render puts it in this header)
+      - key: CLIENT_IP_HEADER
+        value: CF-Connecting-IP
+      # Secrets: "sync: false" means Render asks you to type them on its website.
+      # They are never stored in this repository.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      # The free Neon Postgres database that keeps accounts and files (see DEPLOY.md)
+      - key: DATABASE_URL
+        sync: false
