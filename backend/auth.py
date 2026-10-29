@@ -1,7 +1,7 @@
 """Sign-up, login and logout for EduGuardian AI.
 
-Everything is stored in a small SQLite database file (backend/users.db),
-which Python can use without installing anything extra.
+Everything is stored in a small SQLite database file (backend/users.db) on
+your computer, or in a hosted Postgres database online (see db.py).
 
 How it works:
 1. Sign up: we save the email and a *hash* of the password, never the password itself.
@@ -20,19 +20,16 @@ import hashlib
 import hmac
 import re
 import secrets
-import sqlite3
 import time
-from contextlib import contextmanager
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from db import add_column, connect as _db
 from security import RateLimit, client_ip
 
-DB_PATH = Path(__file__).with_name("users.db")
 SESSION_DAYS = 7               # how long a login lasts before you must log in again
 HASH_ROUNDS = 600_000          # more rounds = slower to guess passwords
 MIN_PASSWORD_LENGTH = 8
@@ -47,20 +44,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 # ---------- Database ----------
-@contextmanager
-def _db():
-    """Use as `with _db() as conn:`. Saves the changes if everything worked,
-    undoes them if there was an error, and always closes the file afterwards."""
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")  # a file or session can't point to a missing user
-    try:
-        with conn:
-            yield conn
-    finally:
-        conn.close()
-
-
 def init_db():
     """Create the tables the first time the server starts."""
     with _db() as conn:
@@ -82,9 +65,7 @@ def init_db():
             )""")
         # Older databases were made before parent accounts existed: add the column.
         # Everyone who signed up before this is a student.
-        columns = [row["name"] for row in conn.execute("PRAGMA table_info(users)")]
-        if "role" not in columns:
-            conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'student'")
+        add_column(conn, "users", "role", "TEXT NOT NULL DEFAULT 'student'")
 
 
 # ---------- Passwords and tokens ----------
@@ -174,11 +155,11 @@ def signup(req: SignupRequest, request: Request):
     with _db() as conn:
         if conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
             raise HTTPException(status_code=409, detail="An account with this email already exists. Please log in.")
-        cur = conn.execute(
-            "INSERT INTO users (name, email, password_hash, created_at, role) VALUES (?, ?, ?, ?, ?)",
+        user_id = conn.execute(
+            "INSERT INTO users (name, email, password_hash, created_at, role) VALUES (?, ?, ?, ?, ?) RETURNING id",
             (name, email, hash_password(req.password), int(time.time()), req.role),
-        )
-        token = _new_session(conn, cur.lastrowid)
+        ).fetchone()["id"]
+        token = _new_session(conn, user_id)
     return {"token": token, "user": {"name": name, "email": email, "role": req.role}}
 
 

@@ -8,6 +8,10 @@ from typing import Literal
 import httpx
 from dotenv import load_dotenv
 
+# Read backend/.env first, so the files below (db.py, security.py) see its settings too.
+# Online there is no .env file: the host's Environment settings fill the same names.
+load_dotenv()
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -27,7 +31,6 @@ from syllabus import init_syllabus_db, router as syllabus_router
 # backend/.env must contain two lines like:
 #   GEMINI_API_KEY=...
 #   GROQ_API_KEY=...
-load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 
@@ -42,14 +45,15 @@ app = FastAPI(
     openapi_url="/openapi.json" if SHOW_DOCS else None,
 )
 app.include_router(auth_router)  # adds /auth/signup, /auth/login, /auth/logout, /auth/me
-init_db()  # creates backend/users.db the first time
+init_db()  # creates the tables the first time (backend/users.db, or the online database: see db.py)
 app.include_router(syllabus_router)  # adds /syllabus (upload, list and delete notes)
 init_syllabus_db()
 app.include_router(family_router)  # adds /family (parent links, parent dashboard, answer mode)
 init_family_db()
 
 # CORS: which other websites may call this backend from a browser.
-# Only pages on this computer, plus any listed in ALLOWED_ORIGINS in backend/.env (see security.py).
+# On your computer: pages on this computer, plus any listed in ALLOWED_ORIGINS in backend/.env.
+# Online: only the site itself (see security.py).
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=LOCAL_ORIGINS,
@@ -255,7 +259,7 @@ def ask(req: AskRequest, user=Depends(current_user)):
     if req.subject not in SUBJECT_PROMPTS:
         raise HTTPException(status_code=400, detail="Unknown subject")
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=503, detail="The server has no GEMINI_API_KEY in backend/.env yet.")
+        raise HTTPException(status_code=503, detail="The server has no GEMINI_API_KEY yet (backend/.env, or the host's Environment settings).")
     check_models(req)
     count_ai_call(user)
     mode, guided = answer_mode(user, req.mode)
@@ -373,7 +377,7 @@ def ask_stream(req: AskRequest, user=Depends(current_user)):
     if req.subject not in SUBJECT_PROMPTS:
         raise HTTPException(status_code=400, detail="Unknown subject")
     if not GEMINI_API_KEY and not GROQ_API_KEY:
-        raise HTTPException(status_code=503, detail="The server has no API keys in backend/.env yet.")
+        raise HTTPException(status_code=503, detail="The server has no API keys yet (backend/.env, or the host's Environment settings).")
     check_models(req)
     count_ai_call(user)
 
@@ -414,7 +418,7 @@ def hint(req: HintRequest, user=Depends(current_user)):
     if req.level not in HINT_RULES:
         raise HTTPException(status_code=400, detail="Hint level must be 1, 2 or 3")
     if not GEMINI_API_KEY and not GROQ_API_KEY:
-        raise HTTPException(status_code=503, detail="The server has no API keys in backend/.env yet.")
+        raise HTTPException(status_code=503, detail="The server has no API keys yet (backend/.env, or the host's Environment settings).")
     check_models(req)
     count_ai_call(user)
 

@@ -4,9 +4,10 @@ Students upload their syllabus or lecture notes (PDF or text) from the
 Syllabus, Study and Roadmap pages. For now we only *keep* the files, so later
 features (answers from your notes, plans built from your syllabus) can read them.
 
-Where things are stored:
-- the files themselves: backend/uploads/<user id>/
-- the list of files (name, subject, size): a table in backend/users.db
+Where things are stored: the files and the list of files (name, subject, size)
+are both in the database (see db.py). Online hosts wipe their disk on every
+restart, so files kept in a folder would disappear. (Older versions saved the
+files in backend/uploads/<user id>/; deleting one still removes it from there.)
 
 The browser sends each file as base64 text inside JSON. This avoids an extra
 package (python-multipart) that normal file uploads in FastAPI would need.
@@ -22,11 +23,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from auth import _db, current_user
+from db import add_column
 from security import RateLimit
 
 UPLOAD_DIR = Path(__file__).with_name("uploads")
 MAX_BYTES = 10 * 1024 * 1024   # 10 MB per file
-MAX_FILES = 30                 # per student, so the disk can't fill up
+MAX_FILES = 30                 # per student, so the database can't fill up
+MAX_TOTAL_BYTES = 50 * 1024 * 1024  # 50 MB in all per student (the free online database holds 1 GB)
 ALLOWED = {".pdf", ".txt", ".md"}
 SUBJECTS = {"maths", "digital_logic", "quantum"}
 UPLOADS_PER_USER = RateLimit(30, 60 * 60, "Too many uploads. Please try again in an hour.")
@@ -47,6 +50,7 @@ def init_syllabus_db():
                 size INTEGER NOT NULL,
                 created_at INTEGER NOT NULL
             )""")
+        add_column(conn, "syllabus_files", "content", "BLOB")  # the file itself
 
 
 def _public(row):
@@ -65,7 +69,7 @@ class UploadRequest(BaseModel):
 def list_files(user=Depends(current_user)):
     with _db() as conn:
         rows = conn.execute(
-            "SELECT * FROM syllabus_files WHERE user_id = ? ORDER BY created_at DESC",
+            "SELECT id, subject, name, size, created_at FROM syllabus_files WHERE user_id = ? ORDER BY created_at DESC",
             (user["id"],)).fetchall()
     return {"files": [_public(r) for r in rows]}
 
@@ -92,19 +96,19 @@ def upload(req: UploadRequest, user=Depends(current_user)):
         raise HTTPException(status_code=400, detail="This doesn't look like a real PDF file.")
 
     with _db() as conn:
-        count = conn.execute("SELECT COUNT(*) FROM syllabus_files WHERE user_id = ?", (user["id"],)).fetchone()[0]
-        if count >= MAX_FILES:
+        totals = conn.execute("SELECT COUNT(*), COALESCE(SUM(size), 0) FROM syllabus_files WHERE user_id = ?",
+                              (user["id"],)).fetchone()
+        if totals[0] >= MAX_FILES:
             raise HTTPException(status_code=400, detail=f"You can keep up to {MAX_FILES} files. Delete one first.")
-        # A random name on disk, so two files called "notes.pdf" never clash
+        if totals[1] + len(content) > MAX_TOTAL_BYTES:
+            raise HTTPException(status_code=400, detail="Your files are using all of your 50 MB. Delete one first.")
+        # A random name, so two files called "notes.pdf" never clash
         stored = f"{secrets.token_hex(8)}{ext}"
-        folder = UPLOAD_DIR / str(user["id"])
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / stored).write_bytes(content)
-        cur = conn.execute(
-            """INSERT INTO syllabus_files (user_id, subject, name, stored_name, size, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (user["id"], req.subject, re.sub(r"[\x00-\x1f]", "", name), stored, len(content), int(time.time())))
-        row = conn.execute("SELECT * FROM syllabus_files WHERE id = ?", (cur.lastrowid,)).fetchone()
+        row = conn.execute(
+            """INSERT INTO syllabus_files (user_id, subject, name, stored_name, size, created_at, content)
+               VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, subject, name, size, created_at""",
+            (user["id"], req.subject, re.sub(r"[\x00-\x1f]", "", name), stored, len(content), int(time.time()),
+             content)).fetchone()
     return _public(row)
 
 
@@ -112,10 +116,11 @@ def upload(req: UploadRequest, user=Depends(current_user)):
 def delete_file(file_id: int, user=Depends(current_user)):
     with _db() as conn:
         # "AND user_id = ?" means you can only delete your own files
-        row = conn.execute("SELECT * FROM syllabus_files WHERE id = ? AND user_id = ?",
+        row = conn.execute("SELECT stored_name FROM syllabus_files WHERE id = ? AND user_id = ?",
                            (file_id, user["id"])).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="File not found.")
         conn.execute("DELETE FROM syllabus_files WHERE id = ?", (file_id,))
+    # Files uploaded by older versions were saved in a folder too
     (UPLOAD_DIR / str(user["id"]) / row["stored_name"]).unlink(missing_ok=True)
     return {"ok": True}

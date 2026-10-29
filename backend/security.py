@@ -8,6 +8,10 @@
 4. scrub(): removes the host's API keys from any error text, just in case.
 
 Nothing here needs an extra package.
+
+Online (on Render), the host's Environment settings add EDUGUARDIAN_HOSTED=1.
+That switches on the stricter online rules: no localhost addresses in CORS or
+the CSP, and HTTPS-only (HSTS). See render.yaml.
 """
 import os
 import threading
@@ -16,6 +20,8 @@ from collections import defaultdict, deque
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
+
+HOSTED = os.getenv("EDUGUARDIAN_HOSTED", "") == "1"
 
 
 # ---------- 1. Rate limits ----------
@@ -50,7 +56,18 @@ class RateLimit:
                     del self.calls[k]
 
 
+# Online, every visitor reaches us through the host's proxy, so request.client is the
+# proxy's address and everyone would share one rate limit. The proxy writes the
+# visitor's real address into a header; CLIENT_IP_HEADER names it (on Render:
+# CF-Connecting-IP, which visitors can't fake). Leave it empty on your computer.
+CLIENT_IP_HEADER = os.getenv("CLIENT_IP_HEADER", "").strip()
+
+
 def client_ip(request):
+    if CLIENT_IP_HEADER:
+        ip = request.headers.get(CLIENT_IP_HEADER, "").strip()
+        if ip:
+            return ip
     return request.client.host if request.client else "unknown"
 
 
@@ -66,7 +83,8 @@ CSP = "; ".join([
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
     "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
     "img-src 'self' data: blob:",
-    "connect-src 'self' http://127.0.0.1:8000 http://localhost:8000",
+    # Online, the site and the backend are the same address, so 'self' is enough
+    "connect-src 'self'" if HOSTED else "connect-src 'self' http://127.0.0.1:8000 http://localhost:8000",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -81,6 +99,9 @@ SECURITY_HEADERS = {
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
     "Cross-Origin-Opener-Policy": "same-origin",
 }
+if HOSTED:
+    # Online the site is HTTPS only: browsers will refuse a plain http:// version for a year
+    SECURITY_HEADERS["Strict-Transport-Security"] = "max-age=31536000"
 
 # The /docs test page (only on when EDUGUARDIAN_DOCS=1) loads its own scripts, so it skips the CSP
 DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
@@ -140,9 +161,9 @@ class BodySizeLimit:
 
 # ---------- 4. Never show a key in an error ----------
 def scrub(text):
-    """Replace the host's API keys with [hidden] in any text we are about to show or print."""
+    """Replace the host's API keys (and database password) with [hidden] in any text we are about to show or print."""
     text = str(text)
-    for name in ("GEMINI_API_KEY", "GROQ_API_KEY"):
+    for name in ("GEMINI_API_KEY", "GROQ_API_KEY", "DATABASE_URL"):  # the database address holds its password
         key = os.getenv(name, "").strip()
         if len(key) >= 8:
             text = text.replace(key, "[hidden]")
@@ -150,9 +171,11 @@ def scrub(text):
 
 
 # ---------- Which websites may call this backend (CORS) ----------
-# Only pages on this computer (http://127.0.0.1 or http://localhost, any port).
-# To allow a real website later, add it to backend/.env, for example:
+# On your computer: only pages on this computer (http://127.0.0.1 or http://localhost, any port).
+# Online: none are needed, because the backend serves the website itself (same address),
+# so LOCAL_ORIGINS is off. To allow another website, add it to backend/.env
+# (or the host's Environment settings), for example:
 #   ALLOWED_ORIGINS=https://eduguardian.example.com
-LOCAL_ORIGINS = r"^http://(127\.0\.0\.1|localhost)(:\d+)?$"
+LOCAL_ORIGINS = None if HOSTED else r"^http://(127\.0\.0\.1|localhost)(:\d+)?$"
 def extra_origins():
     return [o.strip().rstrip("/") for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
