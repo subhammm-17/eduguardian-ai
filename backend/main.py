@@ -69,7 +69,12 @@ FORMAT_RULES = (
     "Put each output (like Sum and Carry) on its own line.\n"
     "- For other diagrams (flowcharts, block diagrams, state machines, processes), "
     "write a code block with the language 'mermaid' using simple Mermaid flowchart syntax "
-    "(for example: flowchart LR, then lines like A[Input] --> B[Step]). Keep labels short and plain."
+    "(for example: flowchart LR, then lines like A[Input] --> B[Step]). Keep labels short and plain: "
+    "no brackets, | or maths symbols inside a label.\n"
+    "- For the Bloch sphere (or a qubit state on it), do NOT use Mermaid. Write a code block with the "
+    "language 'figure' holding one line: bloch theta=<degrees> phi=<degrees> label=<state>, for example:\n"
+    "```figure\nbloch theta=90 phi=0 label=|+⟩\n```\n"
+    "The website draws a real 3-D Bloch sphere from it. Named states also work: bloch state=0, 1, +, -, +i or -i."
 )
 
 # Socratic mode: guide the student with questions instead of giving the answer away

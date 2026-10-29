@@ -153,6 +153,11 @@
 .fig text.small-t { font-size: 10px; fill: var(--muted); }
 .fig text.ink.small-t { fill: var(--text); font-weight: 600; }
 .prose .mermaid-box svg { max-width: 100%; height: auto; }
+/* Our own figures in answers, like the Bloch sphere (```figure blocks) */
+.prose .figure-box .fig { width: 100%; max-width: 380px; }
+/* A diagram the model wrote wrongly: a short note, with the text folded away */
+.prose .diagram-fallback { color: var(--muted); font-size: 14px; }
+.prose .diagram-fallback summary { cursor: pointer; }
 .prose .katex-display { margin: 0.9em 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
 .hint-msg { border-left: 2px solid var(--accent); padding: 4px 0 4px 14px; }
 .hint-msg .hint-title { font-size: 12px; font-weight: 600; color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }

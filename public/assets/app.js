@@ -4,14 +4,14 @@
 // Sign-in, Ask, hints and graphs use the FastAPI backend (through api.js).
 // Syllabus uploads are saved by the backend too. Today's plan is saved in this browser.
 // The rest of Home, Study and Roadmap still use sample data from fixtures.js.
-import * as api from "./api.js?v=9";
+import * as api from "./api.js?v=10";
 import {
   SUBJECTS, MODELS, DASHBOARD, TODAY_TASKS, RECENT_QUESTIONS, SUGGESTIONS,
   HINT_LABELS, DECKS, QUIZ_BANK,
   QUIZ_HISTORY, REVIEWS_WEEK, PROMPT_TEMPLATES, QUIZ_TEMPLATES, ROADMAP_TEMPLATES,
-} from "./fixtures.js?v=9";
-import { figure, lineChart, barChart, wireCharts } from "./figures.js?v=9";
-import { circuitSvg } from "./circuits.js?v=9";
+} from "./fixtures.js?v=10";
+import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=10";
+import { circuitSvg } from "./circuits.js?v=10";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -117,20 +117,21 @@ function rich(md, inline = false, streaming = false) {
 
 /* ---------- Tables and diagrams in answers ---------- */
 
-// While streaming, a ```logic or ```mermaid block that isn't finished yet is
+// While streaming, a ```logic, ```figure or ```mermaid block that isn't finished yet is
 // shown as "Drawing diagram…" instead of half-written code.
 function cutUnfinishedDiagram(text) {
   const fences = [...text.matchAll(/^ {0,3}```(\w*)/gm)];
   if (fences.length % 2 === 0) return text;
   const last = fences.at(-1);
-  if (!["logic", "mermaid"].includes(last[1])) return text;
+  if (!["logic", "mermaid", "figure"].includes(last[1])) return text;
   return text.slice(0, last.index) + "\n\n*Drawing diagram…*";
 }
 
 // Wide tables scroll sideways on phones, ```logic blocks become circuit
-// drawings, and ```mermaid blocks wait for drawMermaid() (they need a library).
+// drawings, ```figure blocks become our own SVG figures (like the Bloch sphere),
+// and ```mermaid blocks wait for drawMermaid() (they need a library).
 function tablesAndDiagrams(html) {
-  if (!html.includes("<table") && !html.includes("language-logic") && !html.includes("language-mermaid")) return html;
+  if (!/<table|language-(logic|mermaid|figure)/.test(html)) return html;
   const tpl = document.createElement("template");
   tpl.innerHTML = html;
   tpl.content.querySelectorAll("table").forEach((t) => {
@@ -147,7 +148,23 @@ function tablesAndDiagrams(html) {
     fig.innerHTML = svgHtml; // built by circuits.js, which escapes every name
     code.parentElement.replaceWith(fig);
   });
+  tpl.content.querySelectorAll("pre > code.language-figure").forEach((code) => {
+    const svgHtml = answerFigure(code.textContent);
+    if (!svgHtml) return; // not a figure we know: keep the text
+    const fig = document.createElement("figure");
+    fig.className = "diagram figure-box";
+    fig.innerHTML = svgHtml; // built by figures.js, which escapes the label
+    code.parentElement.replaceWith(fig);
+  });
   tpl.content.querySelectorAll("pre > code.language-mermaid").forEach((code) => {
+    // Mermaid can't draw a 3-D sphere, so a "Bloch sphere" flowchart becomes our real drawing
+    if (looksLikeBloch(code.textContent)) {
+      const fig = document.createElement("figure");
+      fig.className = "diagram figure-box";
+      fig.innerHTML = answerFigure("bloch");
+      code.parentElement.replaceWith(fig);
+      return;
+    }
     const fig = document.createElement("figure");
     fig.className = "diagram mermaid-box";
     fig.dataset.src = code.textContent;
@@ -155,6 +172,19 @@ function tablesAndDiagrams(html) {
     code.parentElement.replaceWith(fig);
   });
   return tpl.innerHTML;
+}
+
+// A Mermaid block that tries to show the Bloch sphere (its axes and |0⟩ / |1⟩)
+function looksLikeBloch(src) {
+  if (/bloch/i.test(src)) return true;
+  const axes = (src.match(/\b[XYZ][- ]?axis/gi) || []).length;
+  return axes >= 2 && /\|0⟩|\|1⟩|θ|theta/i.test(src);
+}
+
+// Mermaid often fails on labels with brackets or | inside, like A[Z-axis (|0⟩)].
+// Putting every [label] in quotes fixes most of them, so we try that second.
+function quoteMermaidLabels(src) {
+  return src.replace(/(\b\w+)\[(?!")([^\]\n]+)\]/g, (_, id, label) => `${id}["${label.replace(/"/g, "'")}"]`);
 }
 
 // Mermaid (flowcharts, block diagrams, state diagrams) is a big library, so it
@@ -202,23 +232,33 @@ async function drawMermaid(root = document) {
   }
   mermaidLib.initialize(mermaidTheme());
   for (const box of boxes) {
-    try {
-      const { svg } = await mermaidLib.render(`mmd-${++mermaidCount}`, box.dataset.src);
-      box.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
-      box.querySelector("svg")?.classList.add("mermaid-svg");
-    } catch (e) {
-      showDiagramText(box); // the model wrote something Mermaid can't read
+    let svg = null;
+    for (const src of [box.dataset.src, quoteMermaidLabels(box.dataset.src)]) {
+      try {
+        ({ svg } = await mermaidLib.render(`mmd-${++mermaidCount}`, src));
+        break;
+      } catch (e) {
+        document.getElementById(`dmmd-${mermaidCount}`)?.remove(); // Mermaid leaves an error box behind
+      }
     }
+    if (!svg) { showDiagramText(box); continue; } // the model wrote something Mermaid can't read
+    box.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
+    box.querySelector("svg")?.classList.add("mermaid-svg");
   }
 }
 
-// Fallback: show the diagram's text as a code block
+// Fallback: say the diagram couldn't be drawn, and keep its text folded away
 function showDiagramText(box) {
+  const details = document.createElement("details");
+  details.className = "diagram-fallback";
+  const summary = document.createElement("summary");
+  summary.textContent = "This diagram couldn't be drawn. Show its text";
   const pre = document.createElement("pre");
   const code = document.createElement("code");
   code.textContent = box.dataset.src;
   pre.append(code);
-  box.replaceWith(pre);
+  details.append(summary, pre);
+  box.replaceWith(details);
 }
 
 // Redraw Mermaid diagrams when the bright/dark theme changes
