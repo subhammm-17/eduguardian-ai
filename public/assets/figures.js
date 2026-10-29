@@ -124,6 +124,79 @@ function bloch() {
     "Bloch sphere: |0⟩ at the top, |1⟩ at the bottom, and the state |+⟩ on the equator");
 }
 
+// Named qubit states as [theta, phi] in degrees, for ```figure blocks in answers.
+const BLOCH_STATES = {
+  "0": [0, 0], "1": [180, 0], "+": [90, 0], "-": [90, 180], "+i": [90, 90], "-i": [90, 270],
+};
+
+const escapeText = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+// A full Bloch sphere for answers: X, Y and Z axes, the equator, and one
+// state |ψ⟩ drawn at angles theta (down from |0⟩) and phi (around from X).
+export function blochState({ theta = 60, phi = 45, label = "|ψ⟩" } = {}) {
+  const cx = 170, cy = 150, r = 100;
+  // Turn the sphere a little (az) and tilt it towards us (el) so it looks 3-D.
+  const az = (-30 * Math.PI) / 180, sinE = 0.3, cosE = Math.sqrt(1 - sinE * sinE);
+  const P = (x, y, z) => {
+    const depth = x * Math.cos(az) - y * Math.sin(az);
+    const side = x * Math.sin(az) + y * Math.cos(az);
+    return [f1(cx + r * side), f1(cy - r * z * cosE + r * depth * sinE)];
+  };
+  const t = (theta * Math.PI) / 180, p = (phi * Math.PI) / 180;
+  const sx = Math.sin(t) * Math.cos(p), sy = Math.sin(t) * Math.sin(p), sz = Math.cos(t);
+  const [px, py] = P(sx, sy, sz);
+  const [fx, fy] = P(sx, sy, 0); // the state's shadow on the equator
+  const [xx, xy] = P(1.3, 0, 0), [yx, yy] = P(0, 1.3, 0);
+  const [ox, oy] = P(-1, 0, 0), [wx, wy] = P(0, -1, 0);
+  const [zx, zy] = P(0, 0, 1), [bx, by] = P(0, 0, -1);
+  const showShadow = Math.sin(t) > 0.05 && Math.abs(sz) > 0.05;
+  return svg(340, 300, `
+    <circle class="sphere" cx="${cx}" cy="${cy}" r="${r}"/>
+    <ellipse class="dash" cx="${cx}" cy="${cy}" rx="${r}" ry="${f1(r * sinE)}"/>
+    <line class="dash" x1="${ox}" y1="${oy}" x2="${cx}" y2="${cy}"/>
+    <line class="dash" x1="${wx}" y1="${wy}" x2="${cx}" y2="${cy}"/>
+    <line class="ax" x1="${cx}" y1="${f1(zy - 18)}" x2="${cx}" y2="${f1(by + 14)}"/>
+    ${arrow(cx, cy, xx, xy, "ln-soft", 6)}
+    ${arrow(cx, cy, yx, yy, "ln-soft", 6)}
+    ${showShadow ? `<line class="dash" x1="${px}" y1="${py}" x2="${fx}" y2="${fy}"/><line class="dash" x1="${cx}" y1="${cy}" x2="${fx}" y2="${fy}"/>` : ""}
+    <circle class="dot-soft" cx="${zx}" cy="${zy}" r="4"/><circle class="dot-soft" cx="${bx}" cy="${by}" r="4"/>
+    ${arrow(cx, cy, px, py, "ln", 8)}
+    <circle class="dot" cx="${px}" cy="${py}" r="5"/>
+    <circle class="dot-soft" cx="${cx}" cy="${cy}" r="3"/>
+    <text class="ink big" x="${cx + 10}" y="${f1(zy - 6)}">|0⟩</text>
+    <text x="${cx + 10}" y="${f1(zy - 22)}">z</text>
+    <text class="ink big" x="${cx + 10}" y="${f1(by + 22)}">|1⟩</text>
+    <text x="${f1(xx - 18)}" y="${f1(xy + 16)}">x  |+⟩</text>
+    <text x="${f1(yx + 6)}" y="${f1(yy + 4)}">y  |+i⟩</text>
+    <text class="hl-text big" x="${f1(px + (px >= cx ? 10 : -10))}" y="${f1(py - 8)}" text-anchor="${px >= cx ? "start" : "end"}">${escapeText(label)}</text>
+    <text x="16" y="290">θ = ${Math.round(theta)}°, φ = ${Math.round(phi)}°</text>`,
+    `Bloch sphere with |0⟩ at the top, |1⟩ at the bottom, x and y axes on the equator, and the state ${escapeText(label)} at θ = ${Math.round(theta)}°, φ = ${Math.round(phi)}°`);
+}
+
+// Reads the line inside a ```figure block, for example
+//   bloch theta=90 phi=0 label=|+⟩     or     bloch state=+i
+// and returns the SVG, or "" when it is not a figure we know.
+export function answerFigure(src) {
+  const words = src.trim().split(/\s+/);
+  const name = (words.shift() || "").toLowerCase();
+  const opts = {};
+  for (const w of words) {
+    const [k, ...v] = w.split("=");
+    if (v.length) opts[k.toLowerCase()] = v.join("=");
+  }
+  if (name === "bloch" || name === "bloch-sphere") {
+    const named = BLOCH_STATES[(opts.state || "").replace(/[|⟩>]/g, "")];
+    const theta = named ? named[0] : Number.parseFloat(opts.theta);
+    const phi = named ? named[1] : Number.parseFloat(opts.phi);
+    return blochState({
+      theta: Number.isFinite(theta) ? theta : 60,
+      phi: Number.isFinite(phi) ? phi : 45,
+      label: opts.label || (named ? `|${opts.state.replace(/[|⟩>]/g, "")}⟩` : "|ψ⟩"),
+    });
+  }
+  return figure(name);
+}
+
 function hadamard() {
   return svg(360, 110, `
     <line class="ax" x1="50" y1="50" x2="260" y2="50"/>
