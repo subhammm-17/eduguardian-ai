@@ -92,7 +92,7 @@ def add_security_headers(request, response):
             continue
         response.headers.setdefault(name, value)
     # Answers and account details should never be kept in a shared cache
-    if request.url.path.startswith(("/auth", "/ask", "/hint", "/plot", "/syllabus")):
+    if request.url.path.startswith(("/auth", "/ask", "/hint", "/plot", "/syllabus", "/family")):
         response.headers["Cache-Control"] = "no-store"
     else:
         # Pages, styles and scripts: check for a newer version each time,

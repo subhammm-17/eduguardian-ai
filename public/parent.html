@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#241812" />
+  <meta name="color-scheme" content="dark" />
+  <title>Parent dashboard — EduGuardian AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/styles.css?v=14" />
+  <link rel="stylesheet" href="/assets/app.css?v=14" />
+</head>
+<body>
+  <a href="#view" class="sr-only">Skip to content</a>
+  <div class="main parent-page">
+    <header class="topbar">
+      <a href="/" class="logo">
+        <span class="logo-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <span>EduGuardian AI</span>
+      </a>
+      <div class="topbar-controls">
+        <span class="small muted parent-who" id="parent-name"></span>
+        <button type="button" class="btn btn-sm" id="logout">Sign out</button>
+      </div>
+    </header>
+
+    <main id="view" class="view" tabindex="-1">
+      <div class="page-head">
+        <h1 class="page-title">Parent dashboard</h1>
+        <p class="muted">Follow your child's learning and choose how the AI answers their questions.</p>
+      </div>
+
+      <!-- Link a child with the code they made in their account menu -->
+      <div class="card link-card">
+        <div class="card-head"><h3>Link a child</h3></div>
+        <form class="link-form" id="link-form">
+          <p class="small muted">Ask your child to sign in, open their account menu (the round button at the top right) and choose
+            <strong>Parent link</strong>, then <strong>Create a code for my parent</strong>. Type that code here.</p>
+          <div class="link-row">
+            <label class="sr-only" for="link-code">Code from your child</label>
+            <input class="input mono" id="link-code" placeholder="ABCD-EFGH" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" required />
+            <button class="btn btn-primary" type="submit" id="link-submit">Link</button>
+          </div>
+          <p class="error-text" id="link-error" role="alert" hidden></p>
+        </form>
+      </div>
+
+      <div class="child-tabs" id="child-tabs" role="tablist" aria-label="Your children"></div>
+
+      <p class="muted empty-note" id="no-children" hidden>No child is linked yet. Use a code from your child to get started.</p>
+
+      <section id="child" hidden aria-live="polite">
+        <div class="card mode-card">
+          <div class="card-head">
+            <h3>How the AI answers <span id="child-name-mode"></span></h3>
+            <span class="badge" id="mode-badge"></span>
+          </div>
+          <div class="mode-body">
+            <div class="mode-options" role="radiogroup" aria-label="Answer mode">
+              <label class="mode-option">
+                <input type="radio" name="answer-mode" value="hints" />
+                <span><strong>Hints and partial steps</strong>
+                  <span class="small muted">The AI explains the idea, gives hints and the first steps, then asks your child to finish. It never gives the final answer.</span></span>
+              </label>
+              <label class="mode-option">
+                <input type="radio" name="answer-mode" value="direct" />
+                <span><strong>Direct answers</strong>
+                  <span class="small muted">Full worked solutions with the final answer.</span></span>
+              </label>
+            </div>
+            <p class="small muted">This is checked on our server for every question, so it can't be switched off from your child's screen.</p>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="card stat">
+            <span class="stat-label">Questions this week</span>
+            <span class="stat-value" id="c-week">0</span>
+            <span class="muted small" id="c-total"></span>
+          </div>
+          <div class="card stat">
+            <span class="stat-label">Hints asked this week</span>
+            <span class="stat-value" id="c-hints">0</span>
+            <span class="muted small" id="c-last"></span>
+          </div>
+          <div class="card stat">
+            <span class="stat-label">Roadmap progress</span>
+            <span class="stat-value" id="c-road">–</span>
+            <div class="progress" aria-hidden="true"><span id="c-road-bar" style="width:0"></span></div>
+            <span class="muted small" id="c-road-meta"></span>
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="card">
+            <div class="card-head">
+              <h3 id="c-chart-title">Questions per day</h3>
+              <span class="muted small">Last 7 days</span>
+            </div>
+            <div class="chart-body" id="c-chart" aria-labelledby="c-chart-title"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Subjects this week</h3></div>
+            <ul class="subject-bars" id="c-subjects"></ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>Recent questions</h3>
+            <span class="muted small">Newest first</span>
+          </div>
+          <ul class="recent-list" id="c-recent"></ul>
+        </div>
+
+        <div class="unlink-row">
+          <button type="button" class="btn btn-ghost btn-sm" id="unlink">Unlink this child</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="assertive"></div>
+  <script type="module" src="/assets/parent.js?v=14"></script>
+</body>
+</html>
