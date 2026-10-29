@@ -1,8 +1,8 @@
 """Syllabus uploads for EduGuardian AI.
 
 Students upload their syllabus or lecture notes (PDF or text) from the
-Syllabus, Study and Roadmap pages. For now we only *keep* the files, so later
-features (answers from your notes, plans built from your syllabus) can read them.
+Syllabus, Study and Roadmap pages. On the Ask page they can then get answers
+that follow one of their files (see notes.py).
 
 Where things are stored: the files and the list of files (name, subject, size)
 are both in the database (see db.py). Online hosts wipe their disk on every
@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from auth import _db, current_user
 from db import add_column
+from notes import extract_text
 from security import RateLimit
 
 UPLOAD_DIR = Path(__file__).with_name("uploads")
@@ -51,12 +52,32 @@ def init_syllabus_db():
                 created_at INTEGER NOT NULL
             )""")
         add_column(conn, "syllabus_files", "content", "BLOB")  # the file itself
+        add_column(conn, "syllabus_files", "text", "TEXT")     # its text, read once (see notes.py)
 
 
 def _public(row):
-    """What the browser sees about a file (never the path on disk)."""
+    """What the browser sees about a file (never the path on disk).
+    readable: True when we found text in it, False when not (e.g. a scanned PDF),
+    None for files uploaded before we read the text (checked on first use)."""
+    text_size = row["text_size"]
     return {"id": row["id"], "subject": row["subject"], "name": row["name"],
-            "size": row["size"], "uploaded_at": row["created_at"]}
+            "size": row["size"], "uploaded_at": row["created_at"],
+            "readable": None if text_size is None else text_size > 0}
+
+
+def file_text(user_id, file_id):
+    """(name, subject, text) of one of this student's files, or None if it isn't theirs.
+    Files uploaded before text reading existed are read now, once."""
+    with _db() as conn:
+        row = conn.execute("SELECT name, subject, text, content FROM syllabus_files WHERE id = ? AND user_id = ?",
+                           (file_id, user_id)).fetchone()
+        if row is None:
+            return None
+        text = row["text"]
+        if text is None:
+            text = extract_text(row["name"], bytes(row["content"] or b""))
+            conn.execute("UPDATE syllabus_files SET text = ? WHERE id = ?", (text, file_id))
+    return row["name"], row["subject"], text
 
 
 class UploadRequest(BaseModel):
@@ -69,7 +90,8 @@ class UploadRequest(BaseModel):
 def list_files(user=Depends(current_user)):
     with _db() as conn:
         rows = conn.execute(
-            "SELECT id, subject, name, size, created_at FROM syllabus_files WHERE user_id = ? ORDER BY created_at DESC",
+            """SELECT id, subject, name, size, created_at, LENGTH(text) AS text_size
+               FROM syllabus_files WHERE user_id = ? ORDER BY created_at DESC""",
             (user["id"],)).fetchall()
     return {"files": [_public(r) for r in rows]}
 
@@ -95,6 +117,8 @@ def upload(req: UploadRequest, user=Depends(current_user)):
     if ext == ".pdf" and not content.startswith(b"%PDF"):
         raise HTTPException(status_code=400, detail="This doesn't look like a real PDF file.")
 
+    text = extract_text(name, content)  # read once now, so questions about it are quick
+
     with _db() as conn:
         totals = conn.execute("SELECT COUNT(*), COALESCE(SUM(size), 0) FROM syllabus_files WHERE user_id = ?",
                               (user["id"],)).fetchone()
@@ -105,10 +129,10 @@ def upload(req: UploadRequest, user=Depends(current_user)):
         # A random name, so two files called "notes.pdf" never clash
         stored = f"{secrets.token_hex(8)}{ext}"
         row = conn.execute(
-            """INSERT INTO syllabus_files (user_id, subject, name, stored_name, size, created_at, content)
-               VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, subject, name, size, created_at""",
+            """INSERT INTO syllabus_files (user_id, subject, name, stored_name, size, created_at, content, text)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, subject, name, size, created_at, LENGTH(text) AS text_size""",
             (user["id"], req.subject, re.sub(r"[\x00-\x1f]", "", name), stored, len(content), int(time.time()),
-             content)).fetchone()
+             content, text)).fetchone()
     return _public(row)
 
 

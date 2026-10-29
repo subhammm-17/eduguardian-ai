@@ -18,7 +18,10 @@ What is stored (all in backend/users.db):
 - link_codes:    codes waiting to be used (only a hash of each code)
 - parent_links:  which parent is linked to which student, and the answer mode
 - activity:      each question and hint a student asked (subject, mode, short text)
-- progress:      the student's roadmap progress, sent by their browser
+- progress:      the student's roadmap progress (updated by study.py whenever the
+                 student saves their roadmap)
+The parent dashboard also shows the student's plan, quiz scores and flashcard
+reviews from study.py. Parents never see the full chats, only the questions.
 """
 import hashlib
 import re
@@ -31,6 +34,7 @@ from pydantic import BaseModel, Field
 
 from auth import _db, current_user
 from security import RateLimit, client_ip
+from study import study_summary
 
 router = APIRouter(prefix="/family", tags=["family"])
 
@@ -211,7 +215,8 @@ class ProgressRequest(BaseModel):
 
 @router.post("/progress")
 def save_progress(req: ProgressRequest, user=Depends(student_user)):
-    """The student's browser sends its roadmap progress here, so parents can see it."""
+    """Older pages sent their roadmap progress here. Newer ones save the whole roadmap
+    with /study/roadmap, which updates the same table."""
     PROGRESS_PER_USER.hit(user["id"])
     exam = req.exam_date if re.fullmatch(r"\d{4}-\d{2}-\d{2}", req.exam_date) else ""
     subject = re.sub(r"[\x00-\x1f\x7f]", "", req.subject).strip()
@@ -284,6 +289,7 @@ def child_details(student_id: int, user=Depends(parent_user)):
             "SELECT kind, subject, mode, text, created_at FROM activity WHERE user_id = ? ORDER BY id DESC LIMIT 20",
             (student_id,)).fetchall()
         road = conn.execute("SELECT * FROM progress WHERE user_id = ?", (student_id,)).fetchone()
+        study = study_summary(conn, student_id)
 
     by_subject = {name: 0 for name in SUBJECTS.values()}
     for r in week:
@@ -302,6 +308,7 @@ def child_details(student_id: int, user=Depends(parent_user)):
         "roadmap": None if road is None else {
             "percent": road["percent"], "done": road["done"], "total": road["total"],
             "subject": road["subject"], "exam_date": road["exam_date"], "updated_at": road["updated_at"]},
+        "study": study,
     }
 
 

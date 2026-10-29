@@ -59,12 +59,15 @@ async function errorFrom(res) {
 }
 
 // fetch() with the login token added. A network failure gets a clearer message.
-async function call(path, { method = "GET", body } = {}) {
+// keepalive: the request still finishes when the page is being closed
+async function call(path, { method = "GET", body, keepalive = false } = {}) {
   const headers = { Authorization: `Bearer ${getToken()}` };
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  const json = body === undefined ? undefined : JSON.stringify(body);
   let res;
   try {
-    res = await fetch(API_BASE + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    // Browsers allow keepalive only for small requests (64 KB)
+    res = await fetch(API_BASE + path, { method, headers, keepalive: keepalive && (json || "").length < 60000, body: json });
   } catch (e) {
     throw new ApiError(`Can't reach the backend at ${API_BASE}. Is uvicorn running?`, 0);
   }
@@ -99,14 +102,19 @@ export async function me() {
 
 /* ---------- Tutoring ---------- */
 
-// Streams an answer. onText(fullTextSoFar) is called each time new words arrive.
-// Returns { text, answeredBy } when the answer is complete.
-// body: { subject, question, mode, primary, history: [{ role, content }] }
-export async function askStream(body, onText) {
+// Streams an answer. onStart(chatId) is called once the answer starts, and
+// onText(fullTextSoFar) each time new words arrive.
+// Returns { text, answeredBy, mode, chatId } when the answer is complete.
+// body: { subject, question, mode, primary, chat_id, file_id }
+// The server saves the question and answer in chat chatId (a new chat when chat_id is empty,
+// or when the subject or file changed).
+export async function askStream(body, onText, onStart = () => {}) {
   const res = await call("/ask/stream", { method: "POST", body });
   const answeredBy = res.headers.get("X-Answered-By") || "";
   // "guided" when a parent turned on hint mode for this student
   const mode = res.headers.get("X-Answer-Mode") || body.mode;
+  const chatId = Number(res.headers.get("X-Chat-Id")) || null;
+  onStart(chatId);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let text = "";
@@ -116,12 +124,53 @@ export async function askStream(body, onText) {
     text += decoder.decode(value, { stream: true });
     onText(text);
   }
-  return { text, answeredBy, mode };
+  return { text, answeredBy, mode, chatId };
 }
 
-// One rung of the hint ladder. level is 1, 2 or 3.
-export async function getHint({ subject, question, level, primary }) {
-  return (await call("/hint", { method: "POST", body: { subject, question, level, primary } })).json();
+// One rung of the hint ladder. level is 1, 2 or 3. The hint is saved in chat chat_id.
+export async function getHint({ subject, question, level, primary, chat_id }) {
+  return (await call("/hint", { method: "POST", body: { subject, question, level, primary, chat_id } })).json();
+}
+
+/* ---------- Chat history (backend/chats.py) ---------- */
+
+// Your saved chats, newest first: [{ id, subject, title, file_name, questions, updated_at }]
+export async function listChats() {
+  return (await (await call("/chats")).json()).chats;
+}
+
+// One chat with its messages: { ..., messages: [{ role, content, mode, answered_by, level }] }
+export async function getChat(id) {
+  return (await call(`/chats/${id}`)).json();
+}
+
+export async function deleteChat(id) {
+  await call(`/chats/${id}`, { method: "DELETE" });
+}
+
+/* ---------- Your study data (backend/study.py) ---------- */
+
+// Everything the Home page shows: { tasks, roadmap, quizzes, cards, recent_chats }
+export async function getStudy() {
+  return (await call("/study")).json();
+}
+
+export async function saveTasks(tasks) {
+  await call("/study/tasks", { method: "POST", body: { tasks }, keepalive: true });
+}
+
+// roadmap = null deletes the plan
+export async function saveRoadmap(roadmap) {
+  await call("/study/roadmap", { method: "POST", body: { roadmap }, keepalive: true });
+}
+
+export async function saveQuiz(topic, score, total) {
+  await call("/study/quiz", { method: "POST", body: { topic, score, total } });
+}
+
+// day is this computer's date, like "2026-10-29"
+export async function saveCardReviews(day, count) {
+  await call("/study/cards", { method: "POST", body: { day, count }, keepalive: true });
 }
 
 // A graph for a maths question, or { image: null } when there is nothing to draw.
@@ -165,11 +214,6 @@ export async function familyStatus() {
 // For students: a one-time code to give to a parent. { code, minutes }
 export async function makeParentCode() {
   return (await call("/family/code", { method: "POST" })).json();
-}
-
-// For students: send roadmap progress so linked parents can see it.
-export async function saveProgress(progress) {
-  await call("/family/progress", { method: "POST", body: progress });
 }
 
 // For parents

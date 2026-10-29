@@ -3,7 +3,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 import httpx
 from dotenv import load_dotenv
@@ -21,11 +21,14 @@ from google import genai
 from google.genai import types
 
 from auth import current_user, init_db, router as auth_router
+from chats import history_for, init_chats_db, new_chat, router as chats_router, save_message, usable_chat
 from family import answer_mode_for, init_family_db, log_activity, router as family_router
+from notes import best_excerpt, notes_rules
 from plots import make_plot
 from security import (LOCAL_ORIGINS, BodySizeLimit, RateLimit, add_security_headers,
                       extra_origins, scrub)
-from syllabus import init_syllabus_db, router as syllabus_router
+from study import init_study_db, router as study_router
+from syllabus import file_text, init_syllabus_db, router as syllabus_router
 
 # The host's own API keys, read from backend/.env (never sent to the browser, never logged).
 # backend/.env must contain two lines like:
@@ -50,6 +53,10 @@ app.include_router(syllabus_router)  # adds /syllabus (upload, list and delete n
 init_syllabus_db()
 app.include_router(family_router)  # adds /family (parent links, parent dashboard, answer mode)
 init_family_db()
+app.include_router(chats_router)  # adds /chats (chat history)
+init_chats_db()
+app.include_router(study_router)  # adds /study (today's plan, roadmap, quiz scores, flashcard reviews)
+init_study_db()
 
 # CORS: which other websites may call this backend from a browser.
 # On your computer: pages on this computer, plus any listed in ALLOWED_ORIGINS in backend/.env.
@@ -60,7 +67,7 @@ app.add_middleware(
     allow_origins=extra_origins(),
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
-    expose_headers=["X-Answered-By", "X-Answer-Mode"],  # which model answered, and in which mode
+    expose_headers=["X-Answered-By", "X-Answer-Mode", "X-Chat-Id"],  # which model answered, in which mode, and the chat
 )
 app.add_middleware(BodySizeLimit)  # refuses requests over 15 MB
 
@@ -177,7 +184,9 @@ class AskRequest(BaseModel):
     backup_model: str = DEFAULT_GROQ_MODEL     # Groq model
     primary: Literal["gemini", "groq"] = "gemini"  # which one answers first (the other is the backup)
     mode: str = "normal"          # "normal" or "socratic"
-    history: list[Turn] = Field(default=[], max_length=20)  # the last few messages of this chat (optional)
+    history: list[Turn] = Field(default=[], max_length=20)  # only used when there is no saved chat yet
+    chat_id: Optional[int] = None  # the saved chat this question continues (see chats.py)
+    file_id: Optional[int] = None  # answer from this uploaded syllabus file (see notes.py)
 
 
 class HintRequest(BaseModel):
@@ -187,6 +196,7 @@ class HintRequest(BaseModel):
     model: str = DEFAULT_GEMINI_MODEL
     backup_model: str = DEFAULT_GROQ_MODEL
     primary: Literal["gemini", "groq"] = "gemini"
+    chat_id: Optional[int] = None  # the hint is saved in this chat
 
 
 def check_models(req):
@@ -217,9 +227,9 @@ def build_prompt(subject, question, mode="normal", history=(), extra="", guided=
         parts.append(GUIDED_RULES)
     if extra:
         parts.append(extra)
-    recent = list(history)[-MAX_HISTORY:]
+    recent = list(history)[-MAX_HISTORY:]  # (role, text) pairs
     if recent:
-        lines = [f"{'Student' if t.role == 'user' else 'Tutor'}: {t.content}" for t in recent]
+        lines = [f"{'Student' if role == 'user' else 'Tutor'}: {text}" for role, text in recent]
         parts.append("Conversation so far:\n" + "\n".join(lines))
     parts.append(f"Question: {question}")
     if guided:
@@ -238,6 +248,50 @@ def answer_mode(user, requested):
     return requested, guided
 
 
+def notes_for(user, req):
+    """The notes part of the prompt when the student asks about one of their files, else ""."""
+    if not req.file_id:
+        return ""
+    found = file_text(user["id"], req.file_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="That file was deleted. Pick another file or ask without one.")
+    name, subject, text = found
+    if subject != req.subject:
+        raise HTTPException(status_code=400, detail="That file belongs to another subject.")
+    if not text:
+        raise HTTPException(status_code=400, detail="We couldn't find any text in that file. "
+                            "If it is a scanned PDF (photos of pages), please upload a PDF with real text.")
+    return notes_rules(name, best_excerpt(text, req.question), name.lower().endswith(".pdf"))
+
+
+def prepare(req, user):
+    """Checks a question and builds its prompt. Returns (prompt, chat id or None, mode)."""
+    if req.mode not in ("normal", "socratic"):
+        raise HTTPException(status_code=400, detail="Unknown mode")
+    if req.subject not in SUBJECT_PROMPTS:
+        raise HTTPException(status_code=400, detail="Unknown subject")
+    check_models(req)
+    count_ai_call(user)
+    mode, guided = answer_mode(user, req.mode)
+    notes = notes_for(user, req)
+    # Earlier messages come from the saved chat. A new chat starts when the subject or file changed.
+    chat_id = usable_chat(user, req.chat_id, req.subject, req.file_id)
+    if chat_id:
+        history = history_for(chat_id, MAX_HISTORY)
+    else:
+        history = [("user" if t.role == "user" else "ai", t.content) for t in req.history]
+    log_activity(user, "question", req.subject, mode, req.question)
+    prompt = build_prompt(req.subject, req.question, req.mode, history, extra=notes, guided=guided)
+    return prompt, chat_id, mode
+
+
+def save_question(user, req, chat_id):
+    """Saves the question in the chat (starting a new chat if needed) and returns the chat id."""
+    chat_id = chat_id or new_chat(user, req.subject, req.question, req.file_id)
+    save_message(chat_id, "user", req.question)
+    return chat_id
+
+
 class PlotRequest(BaseModel):
     question: str = Field(max_length=MAX_QUESTION)
 
@@ -254,27 +308,19 @@ def health():
 
 @app.post("/ask")
 def ask(req: AskRequest, user=Depends(current_user)):
-    if req.mode not in ("normal", "socratic"):
-        raise HTTPException(status_code=400, detail="Unknown mode")
-    if req.subject not in SUBJECT_PROMPTS:
-        raise HTTPException(status_code=400, detail="Unknown subject")
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=503, detail="The server has no GEMINI_API_KEY yet (backend/.env, or the host's Environment settings).")
-    check_models(req)
-    count_ai_call(user)
-    mode, guided = answer_mode(user, req.mode)
-    log_activity(user, "question", req.subject, mode, req.question)
+    prompt, chat_id, mode = prepare(req, user)
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        response = client.models.generate_content(
-            model=req.model,
-            contents=build_prompt(req.subject, req.question, req.mode, req.history, guided=guided),
-        )
-        return {"subject": req.subject, "model": req.model, "mode": mode, "answer": response.text}
+        response = client.models.generate_content(model=req.model, contents=prompt)
     except Exception as e:
         # Never log or return the key itself
         raise HTTPException(status_code=502, detail=f"Model error: {scrub(e)[:300]}")
+    chat_id = save_question(user, req, chat_id)
+    save_message(chat_id, "ai", response.text or "", mode, req.model)
+    return {"subject": req.subject, "model": req.model, "mode": mode, "answer": response.text, "chat_id": chat_id}
 
 
 # ---------- Backup provider (Groq) ----------
@@ -371,41 +417,43 @@ def start_answer(req, prompt):
 @app.post("/ask/stream")
 def ask_stream(req: AskRequest, user=Depends(current_user)):
     """Same as /ask, but sends the answer piece by piece as the model writes it.
-    If the main model fails or is too slow and the server has the other key, the backup answers instead."""
-    if req.mode not in ("normal", "socratic"):
-        raise HTTPException(status_code=400, detail="Unknown mode")
-    if req.subject not in SUBJECT_PROMPTS:
-        raise HTTPException(status_code=400, detail="Unknown subject")
+    If the main model fails or is too slow and the server has the other key, the backup answers instead.
+    The question and the answer are saved in the student's chat history (chats.py)."""
     if not GEMINI_API_KEY and not GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="The server has no API keys yet (backend/.env, or the host's Environment settings).")
-    check_models(req)
-    count_ai_call(user)
-
-    mode, guided = answer_mode(user, req.mode)
-    log_activity(user, "question", req.subject, mode, req.question)
+    prompt, chat_id, mode = prepare(req, user)
 
     start = time.time()
-    prompt = build_prompt(req.subject, req.question, req.mode, req.history, guided=guided)
     first, rest, answered_by = start_answer(req, prompt)
-
     first_wait = time.time() - start
+    # Saved only once the model has started answering, so failed questions don't fill the history
+    chat_id = save_question(user, req, chat_id)
 
     def pieces():
-        if first:
-            yield first
+        answer = []
         try:
-            for text in rest:
-                yield text
-        except Exception:
-            yield "\n\n*(The answer was cut off by a model error. Please try again.)*"
-        # Timing shows in the uvicorn window, so you can see where the time goes
-        print(f"[ask/stream] {req.subject} / {answered_by}: first words after {first_wait:.1f}s, "
-              f"full answer after {time.time() - start:.1f}s", flush=True)
+            if first:
+                answer.append(first)
+                yield first
+            try:
+                for text in rest:
+                    answer.append(text)
+                    yield text
+            except Exception:
+                note = "\n\n*(The answer was cut off by a model error. Please try again.)*"
+                answer.append(note)
+                yield note
+            # Timing shows in the uvicorn window, so you can see where the time goes
+            print(f"[ask/stream] {req.subject} / {answered_by}: first words after {first_wait:.1f}s, "
+                  f"full answer after {time.time() - start:.1f}s", flush=True)
+        finally:
+            # Also runs when the student closes the page halfway: the part they saw is kept
+            save_message(chat_id, "ai", "".join(answer), mode, answered_by)
 
     return StreamingResponse(
         pieces(),
         media_type="text/plain; charset=utf-8",
-        headers={"X-Answered-By": answered_by, "X-Answer-Mode": mode},
+        headers={"X-Answered-By": answered_by, "X-Answer-Mode": mode, "X-Chat-Id": str(chat_id)},
     )
 
 
@@ -431,7 +479,13 @@ def hint(req: HintRequest, user=Depends(current_user)):
         text = first + "".join(rest)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Model error: {scrub(e)[:300]}")
-    return {"level": req.level, "hint": text, "answered_by": answered_by}
+    # Saved in the current chat. A hint asked before any question starts a chat with the problem as its question.
+    chat_id = usable_chat(user, req.chat_id, req.subject, check_file=False)
+    if not chat_id:
+        chat_id = new_chat(user, req.subject, req.question)
+        save_message(chat_id, "user", req.question)
+    save_message(chat_id, "hint", text, mode, answered_by, level=req.level)
+    return {"level": req.level, "hint": text, "answered_by": answered_by, "chat_id": chat_id}
 
 
 @app.post("/plot")
@@ -453,7 +507,7 @@ def plot(req: PlotRequest, user=Depends(current_user)):
 # ---------- The website ----------
 # The backend also serves the pages in public/, so one server runs everything:
 # open http://127.0.0.1:8000 and you get the site. This must stay at the very end,
-# so the routes above (/auth, /ask, /hint, /plot, /syllabus, /family, /health) are matched first.
+# so the routes above (/auth, /ask, /hint, /plot, /syllabus, /family, /chats, /study, /health) are matched first.
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     """Adds the security headers from security.py to every reply, and tells the

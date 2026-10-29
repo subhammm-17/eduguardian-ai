@@ -2,18 +2,19 @@
 // Screens: Home, Ask (Normal + Socratic), Study (Flashcards + Quiz), plus
 // Syllabus and Roadmap previews.
 // Sign-in, Ask, hints and graphs use the FastAPI backend (through api.js).
-// Syllabus uploads are saved by the backend too. Today's plan is saved in this browser.
-// The rest of Home, Study and Roadmap still use sample data from fixtures.js.
+// Saved on the server for each account: chats (History on the Ask page), syllabus files,
+// today's plan, the roadmap, quiz scores and flashcard reviews. A new account starts
+// with an empty Home page. fixtures.js only holds ready-made content (suggestions,
+// templates, starter flashcard decks and the practice quiz questions).
 // Parental controls: a linked parent can turn on hint mode (checked by the server),
-// and roadmap progress is sent to the backend so the parent dashboard can show it.
-import * as api from "./api.js?v=15";
+// and sees this student's plan, roadmap, quizzes and flashcards on the parent dashboard.
+import * as api from "./api.js?v=16";
 import {
-  SUBJECTS, MODELS, DASHBOARD, TODAY_TASKS, RECENT_QUESTIONS, SUGGESTIONS,
-  HINT_LABELS, DECKS, QUIZ_BANK,
-  QUIZ_HISTORY, REVIEWS_WEEK, PROMPT_TEMPLATES, QUIZ_TEMPLATES, ROADMAP_TEMPLATES,
-} from "./fixtures.js?v=15";
-import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=15";
-import { circuitSvg } from "./circuits.js?v=15";
+  SUBJECTS, MODELS, SUGGESTIONS, HINT_LABELS, DECKS, QUIZ_BANK,
+  PROMPT_TEMPLATES, QUIZ_TEMPLATES, ROADMAP_TEMPLATES,
+} from "./fixtures.js?v=16";
+import { figure, answerFigure, lineChart, barChart, wireCharts } from "./figures.js?v=16";
+import { circuitSvg } from "./circuits.js?v=16";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -25,7 +26,10 @@ const state = {
   subject: "maths",
   model: "gemini",
   mode: "normal",
-  history: [], // { role: "user" | "ai", text } — the last few are sent with each question
+  history: [], // { role: "user" | "ai", text } of the chat on screen (the server keeps the saved copy)
+  chatId: null, // the saved chat on screen; null until the first answer of a new chat
+  file: null, // { id, name, subject } when answers should follow an uploaded syllabus file
+  convo: 0, // goes up with every new conversation, so a late answer can't change the new one
   hintLevel: 0,
   busy: false,
   hintLocked: false, // true when a parent turned on hint mode
@@ -295,10 +299,13 @@ function initTopbar() {
   $("#subject").innerHTML = SUBJECTS.map((s) => `<option value="${s.id}">${s.name}</option>`).join("");
   $("#model").innerHTML = MODELS.map((m) => `<option value="${m.id}">${m.label} · ${m.backup} as backup</option>`).join("");
 
+  // A new subject starts a new chat. The old one is already saved (History on the Ask page).
   $("#subject").addEventListener("change", (e) => {
+    const hadChat = state.history.length > 0;
     state.subject = e.target.value;
-    renderSuggestions();
-    resetHints();
+    state.file = null; // files belong to one subject
+    newConversation();
+    if (hadChat) toast(`New chat for ${subjectName(state.subject)}. Your last chat is saved in History.`);
   });
   $("#model").addEventListener("change", (e) => (state.model = e.target.value));
 
@@ -336,9 +343,133 @@ function route(focus = true) {
   $$("[data-nav]").forEach((a) => (a.dataset.nav === name ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
   $("#view-title").textContent = TITLES[name];
   document.title = `${TITLES[name]} — EduGuardian AI`;
-  if (name === "home") renderHome();
+  if (name === "home") { renderHome(); refreshRecentChats(); }
   if (focus) $("#view").focus({ preventScroll: true });
   window.scrollTo(0, 0);
+}
+
+/* ---------- Your study data (saved on the server: backend/study.py) ---------- */
+
+// Loaded once when the page opens (loadStudy). Until then Home and Roadmap say
+// "Loading…" and nothing is saved, so an empty page can never overwrite your saved plan.
+const study = { loaded: false, failed: false, quizzes: [], cards: [], recentChats: [] };
+
+// Changes are saved a moment after the last edit, so ticking five tasks sends one request.
+const pendingSaves = {};
+function saveSoon(name, send) {
+  if (!study.loaded) return;
+  clearTimeout(pendingSaves[name]?.timer);
+  pendingSaves[name] = { send, timer: setTimeout(() => saveNow(name), 800) };
+}
+function saveNow(name) {
+  const job = pendingSaves[name];
+  if (!job) return;
+  delete pendingSaves[name];
+  clearTimeout(job.timer);
+  job.send().catch((err) => {
+    if (err.status === 401) return backToLogin();
+    toast(`Couldn't save your changes: ${err.message}`, "error");
+  });
+}
+// Closing or leaving the page: send what is still waiting
+window.addEventListener("pagehide", () => { Object.keys(pendingSaves).forEach(saveNow); sendReviews(); });
+
+// Older versions kept today's plan and the roadmap in this browser (localStorage), shared by
+// everyone using it, and filled them with samples. The first account that opens this version
+// with nothing saved yet gets its own tasks and plan moved to the server (the samples are left
+// out). Then they are removed from the browser, so another account here never sees them.
+const OLD_TASKS_KEY = "eduguardian_tasks";
+const OLD_ROADMAP_KEY = "eduguardian_roadmap";
+const SAMPLE_TASK_IDS = ["t1", "t2", "t3"];
+
+function readOld(key) {
+  try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
+}
+
+function oldBrowserTasks() {
+  const saved = readOld(OLD_TASKS_KEY);
+  if (!Array.isArray(saved)) return [];
+  return saved.filter((t) => t && t.title && !SAMPLE_TASK_IDS.includes(t.id)).slice(0, 100).map((t) => ({
+    id: String(t.id).slice(0, 40), title: String(t.title).slice(0, 200),
+    minutes: Math.min(600, Math.max(1, Math.round(Number(t.minutes) || 30))), done: Boolean(t.done),
+  }));
+}
+
+function oldBrowserRoadmap() {
+  const r = readOld(OLD_ROADMAP_KEY);
+  if (!r || !Array.isArray(r.sections) || !/^\d{4}-\d{2}-\d{2}$/.test(r.examDate || "")) return null;
+  // The sample plan that older versions built by themselves, never ticked: leave it out
+  const sample = r.subject === "Discrete Mathematics" && r.examDate === "2026-12-08" &&
+    !r.sections.some((sec) => (sec.tasks || []).some((t) => t.done));
+  return sample ? null : r;
+}
+
+function forgetOldBrowserData() {
+  try {
+    localStorage.removeItem(OLD_TASKS_KEY);
+    localStorage.removeItem(OLD_ROADMAP_KEY);
+  } catch (e) {}
+}
+
+async function loadStudy() {
+  let data;
+  try {
+    data = await api.getStudy();
+  } catch (err) {
+    if (err.status === 401) return backToLogin();
+    study.failed = true;
+    renderTasks();
+    renderRoadmap();
+    renderHome();
+    return toast(`Couldn't load your study data: ${err.message}`, "error");
+  }
+  study.quizzes = data.quizzes;
+  study.cards = data.cards;
+  study.recentChats = data.recent_chats;
+  tasks = data.tasks ?? oldBrowserTasks();
+  roadmap = data.roadmap ?? oldBrowserRoadmap();
+  study.loaded = true;
+  study.failed = false;
+  if (data.tasks === null && tasks.length) saveTasks();
+  if (data.roadmap === null && roadmap) saveRoadmap();
+  forgetOldBrowserData();
+
+  if (roadmap) {
+    $("#rm-subject").value = roadmap.subject;
+    $("#rm-date").value = roadmap.examDate;
+    $("#rm-hours").value = roadmap.hours;
+    $("#rm-level").value = roadmap.level;
+    if (ROADMAP_TEMPLATES.some((r) => r.id === roadmap.tpl)) selectRoadmapTpl(roadmap.tpl);
+  }
+  renderTasks();
+  renderRoadmap();
+  renderHome();
+}
+
+// "Today 14:05", "Yesterday", "3 Oct" from Unix seconds
+function whenLabel(seconds) {
+  const d = new Date(seconds * 1000);
+  const days = Math.round((startOfToday() - new Date(d).setHours(0, 0, 0, 0)) / DAY);
+  if (days <= 0) return `Today ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+  if (days === 1) return "Yesterday";
+  return shortDate(d);
+}
+
+// This computer's date as "2026-10-29"
+function localDay(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Flashcards reviewed on each of the last seven days, oldest first
+function cardDays() {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = startOfToday();
+    d.setDate(d.getDate() - i);
+    const row = study.cards.find((c) => c.day === localDay(d));
+    days.push({ label: d.toLocaleDateString("en-GB", { weekday: "short" }), value: row ? row.count : 0, today: i === 0 });
+  }
+  return days;
 }
 
 /* ---------- Home ---------- */
@@ -347,55 +478,74 @@ function renderHome() {
   const h = new Date().getHours();
   const part = h < 12 ? "morning" : h < 18 ? "afternoon" : "evening";
   $("#greeting").textContent = `Good ${part}, ${state.user.name.split(" ")[0]}`;
+  const note = study.failed ? "Couldn't load" : "Loading…";
 
-  $("#stat-due").textContent = DASHBOARD.cardsDue;
-  const q = DASHBOARD.lastQuiz;
-  $("#stat-quiz").textContent = `${q.score}/${q.total}`;
-  $("#stat-quiz-meta").textContent = `${q.topic} · ${q.when}`;
-  const r = roadmap ? roadmapStats() : DASHBOARD.roadmap;
-  $("#stat-road").textContent = `${r.progress}%`;
-  $("#stat-road-bar").style.width = `${r.progress}%`;
-  $("#stat-road-meta").textContent = `${r.exam} · exam on ${r.examDate}`;
+  $("#stat-cards").textContent = study.loaded ? cardDays().at(-1).value : "–";
+  $("#stat-cards-meta").textContent = study.loaded ? "" : note;
+
+  const q = study.quizzes.at(-1);
+  $("#stat-quiz").textContent = q ? `${q.score}/${q.total}` : "–";
+  $("#stat-quiz-meta").textContent = q ? `${q.topic} · ${whenLabel(q.at)}` : study.loaded ? "No quizzes yet. Take one in Study." : note;
+
+  const r = roadmap ? roadmapStats() : null;
+  $("#stat-road").textContent = r ? `${r.progress}%` : "–";
+  $("#stat-road-bar").style.width = `${r ? r.progress : 0}%`;
+  $("#stat-road-meta").textContent = r ? `${r.exam} · exam on ${r.examDate}` : study.loaded ? "No plan yet. Build one in Roadmap." : note;
 
   renderTasks();
-
   renderCharts();
-
-  $("#recent").innerHTML = RECENT_QUESTIONS.map((q) => `
-    <li><span class="q">${escapeHtml(q.text)}</span><span class="muted small">${q.subject} · ${q.when}</span></li>`).join("");
+  renderRecent();
 }
 
 function renderCharts() {
-  const recent = QUIZ_HISTORY.slice(-8);
-  $("#chart-quiz").innerHTML = lineChart(recent, { title: "Quiz scores", valueName: "Score" });
-  const total = REVIEWS_WEEK.reduce((n, d) => n + d.value, 0);
-  const max = Math.max(10, Math.ceil(Math.max(...REVIEWS_WEEK.map((d) => d.value)) / 10) * 10);
-  $("#chart-reviews").innerHTML = barChart(REVIEWS_WEEK, { max, title: "Cards reviewed", valueName: "Cards" });
-  $("#chart-reviews-meta").textContent = `${total} in the last 7 days`;
+  const quizzes = study.quizzes.slice(-8);
+  const pct = (x) => Math.round((x.score / x.total) * 100);
+  // A line needs two points: until then, say what will appear here
+  $("#chart-quiz").innerHTML = quizzes.length >= 2
+    ? lineChart(quizzes.map((x) => ({ label: shortDate(new Date(x.at * 1000)), value: pct(x) })), { title: "Quiz scores", valueName: "Score" })
+    : `<p class="muted small chart-empty">${!study.loaded ? (study.failed ? "Couldn't load your scores." : "Loading…")
+      : quizzes.length ? `Your first score: ${pct(quizzes[0])}%. Take another quiz in Study to see your progress here.`
+      : "No quizzes yet. Take a quiz in Study and your scores appear here."}</p>`;
+  const days = cardDays();
+  const total = days.reduce((n, d) => n + d.value, 0);
+  const max = Math.max(4, Math.ceil(Math.max(...days.map((d) => d.value)) / 4) * 4); // steps of 4 give whole-number grid lines
+  $("#chart-reviews").innerHTML = barChart(days, { max, title: "Cards reviewed", valueName: "Cards" });
+  $("#chart-reviews-meta").textContent = study.loaded ? `${total} in the last 7 days` : "Last 7 days";
   wireCharts($('[data-view="home"]'));
+}
+
+// Recent questions: your newest saved chats. Clicking one opens it in Ask.
+function renderRecent() {
+  $("#recent").innerHTML = study.recentChats.length ? study.recentChats.map((c) => `
+    <li><button type="button" class="recent-open" data-open-chat="${escapeHtml(c.id)}">
+      <span class="q">${escapeHtml(c.title)}</span>
+      <span class="muted small">${escapeHtml(subjectName(c.subject))}${c.file_name ? ` · ${escapeHtml(c.file_name)}` : ""} · ${escapeHtml(whenLabel(c.updated_at))}</span>
+    </button></li>`).join("")
+    : `<li><span class="muted small">${!study.loaded ? (study.failed ? "Couldn't load your questions." : "Loading…") : "No questions yet. Ask your first one below."}</span></li>`;
+}
+
+async function refreshRecentChats() {
+  if (!study.loaded) return;
+  try {
+    study.recentChats = (await api.listChats()).slice(0, 5);
+    renderRecent();
+  } catch (e) {
+    // The list from when the page opened stays
+  }
 }
 
 /* ---------- Home: today's plan ---------- */
 
-// Your tasks are saved in this browser (localStorage), so added and deleted
-// tasks are still there after a refresh. The first time, the sample tasks are used.
-const TASKS_KEY = "eduguardian_tasks";
-let tasks = loadTasks();
-
-function loadTasks() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(TASKS_KEY));
-    if (Array.isArray(saved)) return saved;
-  } catch (e) {}
-  return TODAY_TASKS.map((t) => ({ ...t }));
-}
+// Your tasks are saved on the server for your account (backend/study.py).
+let tasks = [];
 
 function saveTasks() {
-  try { localStorage.setItem(TASKS_KEY, JSON.stringify(tasks)); } catch (e) {}
+  saveSoon("tasks", () => api.saveTasks(tasks));
 }
 
 // Also used by the Roadmap's "+ Today" buttons
 function addTask(title, minutes = 30) {
+  if (!study.loaded) return toast("Your plan is still loading. Please try again in a moment.");
   tasks.push({ id: `t${Date.now()}${Math.floor(Math.random() * 1000)}`, title, minutes, done: false });
   saveTasks();
   renderTasks();
@@ -405,6 +555,11 @@ const ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
 
 function renderTasks() {
   const list = $("#today-tasks");
+  if (!study.loaded) {
+    list.innerHTML = `<li class="task-empty muted small">${study.failed ? "Couldn't load your plan. Please refresh the page." : "Loading your plan…"}</li>`;
+    $("#today-count").textContent = "";
+    return;
+  }
   list.innerHTML = tasks.length ? tasks.map((t) => `
     <li class="${t.done ? "done" : ""}">
       <input type="checkbox" id="task-${escapeHtml(t.id)}" data-task="${escapeHtml(t.id)}" ${t.done ? "checked" : ""} />
@@ -493,6 +648,12 @@ function initHome() {
     location.hash = "#ask";
     ask(text);
   });
+
+  // Recent questions: open that chat in Ask
+  $("#recent").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-open-chat]");
+    if (b) openChat(Number(b.dataset.openChat));
+  });
 }
 
 /* ---------- Ask ---------- */
@@ -517,7 +678,7 @@ function setMode(mode) {
   $("#hint-lock").hidden = !state.hintLocked;
   $("#mode-desc").textContent = MODE_DESC[guided ? "guided" : mode];
   $("#hints").hidden = mode !== "socratic";
-  $("#question").placeholder = mode === "socratic" ? "Describe the problem or share your reasoning…" : "Ask a question…";
+  renderSources(); // also sets the question box's placeholder
 }
 
 function resetHints() {
@@ -525,15 +686,24 @@ function resetHints() {
   $$("[data-hint]").forEach((b, i) => (b.disabled = i !== 0));
 }
 
-function addUserMessage(text) {
+function userBubble(text) {
   const el = document.createElement("div");
   el.className = "msg msg-user";
   el.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
-  $("#thread").append(el);
+  return el;
 }
 
-function metaBadges({ socratic, guided, verified, by }) {
+function addUserMessage(text) {
+  $("#thread").append(userBubble(text));
+}
+
+function hintHtml(level, text) {
+  return `<div class="hint-msg"><div class="hint-title">Hint ${level} · ${HINT_LABELS[level - 1] ?? ""}</div><div class="prose">${rich(text)}</div></div>`;
+}
+
+function metaBadges({ socratic, guided, verified, by, file }) {
   let html = `<span class="badge">${subjectName(state.subject)}</span>`;
+  if (file) html += `<span class="badge badge-accent" title="This answer follows your uploaded file">From ${escapeHtml(file)}</span>`;
   if (socratic) html += `<span class="badge badge-accent">Socratic</span>`;
   if (guided) html += `<span class="badge badge-warn" title="Set by your parent">Hint mode</span>`;
   if (verified) html += `<span class="badge badge-success" title="Result checked with the SymPy solver">${ICON_CHECK}Verified</span>`;
@@ -544,11 +714,6 @@ function metaBadges({ socratic, guided, verified, by }) {
 function backToLogin() {
   api.clearLogin();
   location.href = "/login.html";
-}
-
-// The last few messages, in the shape the backend expects
-function recentHistory() {
-  return state.history.slice(-6).map((m) => ({ role: m.role === "ai" ? "assistant" : "user", content: m.text }));
 }
 
 // Draws a graph under a maths answer when the question has something to plot.
@@ -593,11 +758,12 @@ async function ask(text) {
   $("#clear-chat").hidden = false;
 
   addUserMessage(text);
-  const history = recentHistory(); // earlier messages only, not this question
   state.history.push({ role: "user", text });
 
   const socratic = state.mode === "socratic";
   const subject = state.subject;
+  const file = state.file;
+  const convo = state.convo; // if a new conversation starts meanwhile, this answer stays in the old one
   const msg = document.createElement("div");
   msg.className = "msg msg-ai";
   msg.innerHTML = `<div class="typing" aria-label="Generating answer"><div class="skeleton" style="width:92%"></div><div class="skeleton" style="width:78%"></div><div class="skeleton" style="width:55%"></div></div>`;
@@ -606,8 +772,9 @@ async function ask(text) {
 
   let prose = null;
   try {
+    // The server keeps the earlier messages of chat_id, and saves this question and answer there
     const { text: answer, answeredBy, mode } = await api.askStream(
-      { subject, question: text, mode: state.mode, primary: state.model, history },
+      { subject, question: text, mode: state.mode, primary: state.model, chat_id: state.chatId, file_id: file?.id ?? null },
       (soFar) => {
         // First words arrived: swap the skeleton for the answer area
         if (!prose) {
@@ -616,6 +783,7 @@ async function ask(text) {
         }
         prose.innerHTML = rich(soFar, false, true);
       },
+      (chatId) => { if (state.convo === convo && chatId) state.chatId = chatId; },
     );
     if (!prose) {
       msg.innerHTML = `<div class="msg-meta"></div><div class="prose"></div>`;
@@ -628,15 +796,15 @@ async function ask(text) {
     // The server says "guided" when a parent turned on hint mode (even if this page didn't know yet)
     const guided = mode === "guided";
     if (guided && !state.hintLocked) { state.hintLocked = true; setMode(state.mode); }
-    $(".msg-meta", msg).innerHTML = metaBadges({ socratic, guided, verified: false, by: answeredBy });
-    state.history.push({ role: "ai", text: answer, socratic: socratic || guided });
+    $(".msg-meta", msg).innerHTML = metaBadges({ socratic, guided, verified: false, by: answeredBy, file: file?.name });
+    if (state.convo === convo) state.history.push({ role: "ai", text: answer, socratic: socratic || guided });
     // Graphs appear only in Normal mode, where giving the answer is allowed.
     if (!socratic && !guided && subject === "maths") await addPlot(msg, text);
     if (subject === "quantum") addBlochIfMissing(prose, text, answer);
   } catch (err) {
     if (err.status === 401) return backToLogin();
     msg.innerHTML = `<div class="msg-meta"><span class="badge">Error</span></div><div class="prose"><p>${escapeHtml(err.message)}</p></div>`;
-    state.history.pop(); // forget the question that got no answer
+    if (state.convo === convo) state.history.pop(); // forget the question that got no answer
     toast(err.message, "error");
   } finally {
     state.busy = false;
@@ -649,6 +817,7 @@ async function ask(text) {
 async function showHint(level) {
   const lastQuestion = [...state.history].reverse().find((m) => m.role === "user")?.text;
   const question = lastQuestion || $("#question").value.trim();
+  const convo = state.convo;
   if (!question) {
     toast("Type your problem first, then ask for a hint.");
     return $("#question").focus();
@@ -666,10 +835,18 @@ async function showHint(level) {
   msg.scrollIntoView({ block: "nearest", behavior: "smooth" });
 
   try {
-    const data = await api.getHint({ subject: state.subject, question, level: level + 1, primary: state.model });
-    msg.innerHTML = `<div class="hint-msg"><div class="hint-title">Hint ${level + 1} · ${HINT_LABELS[level]}</div><div class="prose">${rich(data.hint)}</div></div>`;
+    const data = await api.getHint({ subject: state.subject, question, level: level + 1, primary: state.model, chat_id: state.chatId });
+    msg.innerHTML = hintHtml(level + 1, data.hint);
     drawMermaid(msg);
+    if (state.convo !== convo) return; // a new conversation started meanwhile
     state.hintLevel = level + 1;
+    if (data.chat_id) state.chatId = data.chat_id;
+    // A hint for a typed problem (before any question) saves that problem as the chat's question
+    if (!lastQuestion) {
+      state.history.push({ role: "user", text: question });
+      msg.before(userBubble(question));
+      $("#question").value = "";
+    }
   } catch (err) {
     if (err.status === 401) return backToLogin();
     msg.remove();
@@ -682,9 +859,13 @@ async function showHint(level) {
   }
 }
 
-function clearChat() {
+// Starts a fresh conversation. The old one is already saved on the server (History).
+function newConversation() {
+  state.convo++;
+  state.chatId = null;
   state.history = [];
   resetHints();
+  renderSources();
   $("#thread").innerHTML = `
     <div class="empty" id="ask-empty">
       <h2>What are you working on?</h2>
@@ -693,6 +874,106 @@ function clearChat() {
     </div>`;
   renderSuggestions();
   $("#clear-chat").hidden = true;
+}
+
+/* ---------- Ask: chat history ---------- */
+
+// Shows one saved answer the same way a new answer is shown
+function showSavedAnswer(m, question, fileName) {
+  const msg = document.createElement("div");
+  msg.className = "msg msg-ai";
+  if (m.role === "hint") {
+    msg.innerHTML = hintHtml(m.level, m.content);
+  } else {
+    msg.innerHTML = `<div class="msg-meta">${metaBadges({
+      socratic: m.mode === "socratic", guided: m.mode === "guided", verified: false, by: m.answered_by, file: fileName,
+    })}</div><div class="prose">${rich(m.content)}</div>`;
+    if (state.subject === "quantum") addBlochIfMissing($(".prose", msg), question, m.content);
+  }
+  $("#thread").append(msg);
+}
+
+// Opens a saved chat in Ask, so you can read it and keep asking in it.
+async function openChat(id) {
+  if (state.busy) return toast("Please wait until the current answer is finished.");
+  let chat;
+  try {
+    chat = await api.getChat(id);
+  } catch (err) {
+    if (err.status === 401) return backToLogin();
+    return toast(err.message, "error");
+  }
+  if ($("#history-dialog").open) $("#history-dialog").close();
+  state.subject = chat.subject;
+  $("#subject").value = chat.subject;
+  // A chat that used a file keeps using it (unless the file was deleted since)
+  state.file = chat.file_id && chat.file_name ? { id: chat.file_id, name: chat.file_name, subject: chat.subject } : null;
+  renderSyllabus();
+  newConversation();
+  state.chatId = chat.id;
+  if (chat.file_id && !chat.file_name) toast("The file this chat used was deleted, so new answers won't follow it.");
+
+  $("#ask-empty")?.remove();
+  $("#clear-chat").hidden = false;
+  let question = "";
+  for (const m of chat.messages) {
+    if (m.role === "user") {
+      question = m.content;
+      addUserMessage(m.content);
+      state.history.push({ role: "user", text: m.content });
+    } else {
+      showSavedAnswer(m, question, chat.file_name);
+      if (m.role === "ai") state.history.push({ role: "ai", text: m.content });
+    }
+  }
+  drawMermaid($("#thread"));
+  if (location.hash !== "#ask") location.hash = "#ask";
+  $("#thread").lastElementChild?.scrollIntoView({ block: "nearest" });
+}
+
+async function showHistory() {
+  const list = $("#history-list");
+  list.innerHTML = '<li class="muted small">Loading…</li>';
+  $("#history-dialog").showModal();
+  try {
+    const chats = await api.listChats();
+    list.innerHTML = chats.length ? chats.map((c) => `
+      <li${c.id === state.chatId ? ' class="current"' : ""}>
+        <button type="button" class="history-open" data-open-chat="${escapeHtml(c.id)}">
+          <span class="q">${escapeHtml(c.title)}</span>
+          <span class="muted small">${escapeHtml(subjectName(c.subject))}${c.file_name ? ` · ${escapeHtml(c.file_name)}` : ""} · ${escapeHtml(c.questions)} ${c.questions === 1 ? "question" : "questions"} · ${escapeHtml(whenLabel(c.updated_at))}</span>
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" data-del-chat="${escapeHtml(c.id)}" aria-label="Delete chat: ${escapeHtml(c.title)}">Delete</button>
+      </li>`).join("")
+      : '<li class="muted small">No saved chats yet. Ask a question and it appears here.</li>';
+  } catch (err) {
+    if (err.status === 401) return backToLogin();
+    list.innerHTML = `<li class="muted small">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+function initHistory() {
+  const dialog = $("#history-dialog");
+  $("#history-btn").addEventListener("click", showHistory);
+  $("#history-close").addEventListener("click", () => dialog.close());
+  $("#history-list").addEventListener("click", async (e) => {
+    const open = e.target.closest("[data-open-chat]");
+    const del = e.target.closest("[data-del-chat]");
+    if (open) return openChat(Number(open.dataset.openChat));
+    if (!del) return;
+    const id = Number(del.dataset.delChat);
+    if (!confirm("Delete this chat? This can't be undone.")) return;
+    try {
+      await api.deleteChat(id);
+      del.closest("li").remove();
+      study.recentChats = study.recentChats.filter((c) => c.id !== id);
+      if (id === state.chatId) newConversation();
+      if (!$("#history-list li")) $("#history-list").innerHTML = '<li class="muted small">No saved chats yet.</li>';
+    } catch (err) {
+      if (err.status === 401) return backToLogin();
+      toast(err.message, "error");
+    }
+  });
 }
 
 // Prompt templates: fill the composer and select the first [gap] to type over.
@@ -749,7 +1030,8 @@ function initAsk() {
     const b = e.target.closest("[data-hint]");
     if (b && !b.disabled) showHint(Number(b.dataset.hint));
   });
-  $("#clear-chat").addEventListener("click", clearChat);
+  $("#clear-chat").addEventListener("click", newConversation);
+  initHistory();
 
   const autosize = () => { input.style.height = "auto"; input.style.height = `${input.scrollHeight}px`; };
   input.addEventListener("input", autosize);
@@ -772,8 +1054,8 @@ const cards = { deck: null, pos: 0, flipped: false, reviewed: 0, lastFlip: 0 };
 
 function loadDeck(id) {
   const deck = DECKS.find((d) => d.id === id) || DECKS[0];
-  // Lowest box first: those cards need the most practice.
-  cards.deck = { ...deck, cards: deck.cards.map((c) => ({ ...c })).sort((a, b) => a.box - b.box) };
+  // Every card starts in box 1: the boxes show this session's progress, not sample numbers.
+  cards.deck = { ...deck, cards: deck.cards.map((c) => ({ ...c, box: 1 })) };
   cards.pos = 0;
   cards.reviewed = 0;
   $("#card-stage").hidden = false;
@@ -822,9 +1104,7 @@ function rate(rating) {
   // Leitner rules: Again → box 1, Hard → stay, Good → +1, Easy → +2 (max 5).
   card.box = { again: 1, hard: card.box, good: Math.min(5, card.box + 1), easy: Math.min(5, card.box + 2) }[rating];
   cards.reviewed++;
-  DASHBOARD.cardsDue = Math.max(0, DASHBOARD.cardsDue - 1);
-  const today = REVIEWS_WEEK.find((d) => d.today);
-  if (today) today.value++;
+  countReview();
 
   if (cards.pos >= cards.deck.cards.length - 1) {
     renderBoxes();
@@ -839,10 +1119,32 @@ function rate(rating) {
   renderCard();
 }
 
+// Reviews are counted for Home and the parent dashboard, and sent to the server
+// a few seconds after the last one (one request for many cards).
+let unsentReviews = 0;
+let reviewTimer = null;
+
+function countReview() {
+  const day = localDay();
+  const row = study.cards.find((c) => c.day === day);
+  if (row) row.count++;
+  else study.cards.push({ day, count: 1 });
+  unsentReviews++;
+  clearTimeout(reviewTimer);
+  reviewTimer = setTimeout(sendReviews, 3000);
+}
+
+function sendReviews() {
+  clearTimeout(reviewTimer);
+  if (!unsentReviews) return;
+  const count = Math.min(500, unsentReviews);
+  unsentReviews -= count;
+  api.saveCardReviews(localDay(), count).catch(() => {}); // only the count is lost, the session still works
+}
+
 function initFlashcards() {
   const opt = (d) => `<option value="${d.id}">${d.name} (${d.cards.length} cards)</option>`;
-  $("#deck").innerHTML = `<optgroup label="Your decks">${DECKS.filter((d) => !d.template).map(opt).join("")}</optgroup>
-    <optgroup label="Starter templates">${DECKS.filter((d) => d.template).map(opt).join("")}</optgroup>`;
+  $("#deck").innerHTML = `<optgroup label="Starter decks">${DECKS.map(opt).join("")}</optgroup>`;
   $("#deck").addEventListener("change", (e) => loadDeck(e.target.value));
   $("#flashcard").addEventListener("click", () => {
     // A Space key press is already handled below; ignore the duplicate click.
@@ -988,8 +1290,13 @@ function renderScore() {
   const score = quiz.results.filter((r) => r.correct).length;
   const total = quiz.results.length;
   const mistakes = quiz.results.filter((r) => !r.correct);
-  DASHBOARD.lastQuiz = { score, total, topic: quiz.topic, when: "just now" };
-  QUIZ_HISTORY.push({ label: "Today", value: Math.round((score / total) * 100) });
+  // Saved for Home (Last quiz score, Quiz scores chart) and the parent dashboard
+  const topic = quiz.topic.slice(0, 120);
+  study.quizzes.push({ topic, score, total, at: Math.floor(Date.now() / 1000) });
+  api.saveQuiz(topic, score, total).catch((err) => {
+    if (err.status === 401) return backToLogin();
+    toast(`Your score couldn't be saved: ${err.message}`, "error");
+  });
 
   const pct = Math.round((score / total) * 100);
   const note = pct === 100 ? "Excellent. Every answer was correct."
@@ -1082,32 +1389,14 @@ function initStudy() {
 
 /* ---------- Roadmap ---------- */
 
-// Your plan is saved in this browser (localStorage), like Today's plan.
+// Your plan is saved on the server for your account (backend/study.py), which also
+// shows its progress to a linked parent. A new account has no plan until you build one.
 // { tpl, subject, examDate, hours, level, sections: [{ title, dates, tasks: [{ id, text, done }] }] }
-const ROADMAP_KEY = "eduguardian_roadmap";
-let roadmap = loadRoadmap();
-let roadmapTpl = roadmap?.tpl || ROADMAP_TEMPLATES[0].id;
-
-function loadRoadmap() {
-  try { return JSON.parse(localStorage.getItem(ROADMAP_KEY)) || null; } catch (e) { return null; }
-}
+let roadmap = null;
+let roadmapTpl = ROADMAP_TEMPLATES[0].id;
 
 function saveRoadmap() {
-  try { localStorage.setItem(ROADMAP_KEY, JSON.stringify(roadmap)); } catch (e) {}
-  syncProgress();
-}
-
-// Sends roadmap progress to the backend so a linked parent can see it.
-// Waits a second after the last tick, so ticking five tasks sends one update.
-let syncTimer = null;
-function syncProgress() {
-  clearTimeout(syncTimer);
-  if (!roadmap) return;
-  syncTimer = setTimeout(() => {
-    const r = roadmapStats();
-    api.saveProgress({ percent: r.progress, done: r.done, total: r.total, subject: roadmap.subject || "", exam_date: roadmap.examDate || "" })
-      .catch(() => {}); // the plan still works in this browser if this fails
-  }, 1000);
+  saveSoon("roadmap", () => api.saveRoadmap(roadmap));
 }
 
 const DAY = 24 * 3600 * 1000;
@@ -1160,7 +1449,11 @@ const ICON_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 function renderRoadmap() {
   const box = $("#roadmap-preview");
-  if (!roadmap) { box.innerHTML = '<p class="muted">Fill in the form and press <strong>Build my plan</strong>.</p>'; return; }
+  if (!study.loaded) {
+    box.innerHTML = `<p class="muted">${study.failed ? "Couldn't load your plan. Please refresh the page." : "Loading your plan…"}</p>`;
+    return;
+  }
+  if (!roadmap) { box.innerHTML = '<p class="muted">You have no plan yet. Fill in the form and press <strong>Build my plan</strong>.</p>'; return; }
   const st = roadmapStats();
   const days = daysUntil(roadmap.examDate);
   const countdown = days > 1 ? `${days} days to go` : days === 1 ? "Exam is tomorrow" : days === 0 ? "Exam is today" : "Exam date has passed";
@@ -1231,6 +1524,7 @@ function initRoadmap() {
 
   $("#rm-form").addEventListener("submit", (e) => {
     e.preventDefault();
+    if (!study.loaded) return toast("Your plan is still loading. Please try again in a moment.");
     const answers = {
       subject: $("#rm-subject").value.trim() || "My subject",
       examDate: $("#rm-date").value,
@@ -1282,19 +1576,7 @@ function initRoadmap() {
     $(`#rm-add-${si}`).focus();
   });
 
-  // Start from your saved plan, or build the first one for you
-  if (roadmap) {
-    $("#rm-subject").value = roadmap.subject;
-    $("#rm-date").value = roadmap.examDate;
-    $("#rm-hours").value = roadmap.hours;
-    $("#rm-level").value = roadmap.level;
-  } else if (daysUntil($("#rm-date").value) >= 1) {
-    roadmap = buildRoadmap(roadmapTpl, {
-      subject: $("#rm-subject").value, examDate: $("#rm-date").value,
-      hours: Number($("#rm-hours").value), level: $("#rm-level").value,
-    });
-    saveRoadmap();
-  }
+  // Your saved plan is filled in by loadStudy() once it arrives
   selectRoadmapTpl(roadmapTpl);
   renderRoadmap();
 }
@@ -1302,6 +1584,7 @@ function initRoadmap() {
 /* ---------- Syllabus uploads (Syllabus, Study and Roadmap pages) ---------- */
 
 let syllabusFiles = [];
+let syllabusLoaded = false;
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -1314,8 +1597,11 @@ function renderSyllabus() {
   $("#syllabus-files").innerHTML = syllabusFiles.length ? syllabusFiles.map((f) => `
     <li>
       <span class="file-name">${escapeHtml(f.name)}</span>
-      <span class="muted small">${escapeHtml(subjectName(f.subject))} · ${formatSize(f.size)}</span>
-      <button type="button" class="btn btn-ghost btn-sm" data-del-file="${escapeHtml(f.id)}" aria-label="Delete ${escapeHtml(f.name)}">Delete</button>
+      <span class="muted small">${escapeHtml(subjectName(f.subject))} · ${formatSize(f.size)}${f.readable === false ? " · no text found (scanned?)" : ""}</span>
+      <span class="file-actions">
+        ${f.readable === false ? "" : `<button type="button" class="btn btn-sm" data-ask-file="${escapeHtml(f.id)}">Ask from this file</button>`}
+        <button type="button" class="btn btn-ghost btn-sm" data-del-file="${escapeHtml(f.id)}" aria-label="Delete ${escapeHtml(f.name)}">Delete</button>
+      </span>
     </li>`).join("") : '<li class="muted small">No files yet.</li>';
 
   const mine = syllabusFiles.filter((f) => f.subject === state.subject);
@@ -1325,6 +1611,50 @@ function renderSyllabus() {
       ? `${subjectName(state.subject)}: ${mine.map((f) => f.name).slice(0, 2).join(", ")}${mine.length > 2 ? ` and ${mine.length - 2} more` : ""}`
       : el.dataset.empty;
   });
+  renderSources();
+}
+
+// "Answer from" on the Ask page: general knowledge, or one of your files for this subject
+function renderSources() {
+  // A file that was deleted (or belongs to another subject) can't be used any more
+  if (state.file && syllabusLoaded && !syllabusFiles.some((f) => f.id === state.file.id && f.subject === state.subject)) {
+    state.file = null;
+  }
+  const files = syllabusFiles.filter((f) => f.subject === state.subject && f.readable !== false);
+  if (state.file && !files.some((f) => f.id === state.file.id)) files.unshift(state.file);
+  $("#source-pick").hidden = files.length === 0;
+  $("#source").innerHTML = `<option value="">General knowledge</option>` +
+    files.map((f) => `<option value="${escapeHtml(f.id)}">${escapeHtml(f.name)}</option>`).join("");
+  $("#source").value = state.file ? String(state.file.id) : "";
+  $("#question").placeholder = state.file ? `Ask about ${state.file.name}…`
+    : state.mode === "socratic" ? "Describe the problem or share your reasoning…" : "Ask a question…";
+}
+
+// Answers follow this file from now on, in a new chat
+function askFromFile(file) {
+  if (state.busy) return toast("Please wait until the current answer is finished.");
+  if (file.subject !== state.subject) {
+    state.subject = file.subject;
+    $("#subject").value = file.subject;
+  }
+  state.file = { id: file.id, name: file.name, subject: file.subject };
+  renderSyllabus();
+  newConversation();
+  location.hash = "#ask";
+  toast(`Answers now follow ${file.name}`);
+  $("#question").focus();
+}
+
+// After an upload: offer to answer questions from the new file
+function showUploaded(file) {
+  const box = $("#upload-done");
+  if (file.readable === false) {
+    box.hidden = true;
+    return toast(`We couldn't find any text in ${file.name}. It is saved, but answers can't use it (it may be a scanned PDF).`, "error");
+  }
+  box.innerHTML = `<span><strong>${escapeHtml(file.name)}</strong> is ready. Want answers that follow it?</span>
+    <button type="button" class="btn btn-primary btn-sm" data-ask-file="${escapeHtml(file.id)}">Ask questions from this file</button>`;
+  box.hidden = false;
 }
 
 async function uploadFiles(fileList) {
@@ -1332,9 +1662,11 @@ async function uploadFiles(fileList) {
   if (!files.length) return;
   $$("[data-upload-syllabus]").forEach((b) => (b.disabled = true));
   let added = 0;
+  let last = null;
   for (const file of files) {
     try {
-      syllabusFiles.unshift(await api.uploadSyllabus(file, state.subject));
+      last = await api.uploadSyllabus(file, state.subject);
+      syllabusFiles.unshift(last);
       added++;
     } catch (err) {
       if (err.status === 401) return backToLogin();
@@ -1344,6 +1676,7 @@ async function uploadFiles(fileList) {
   $$("[data-upload-syllabus]").forEach((b) => (b.disabled = false));
   renderSyllabus();
   if (added) toast(`Uploaded ${added} ${added === 1 ? "file" : "files"} for ${subjectName(state.subject)}`);
+  if (last) showUploaded(last);
 }
 
 function initSyllabus() {
@@ -1364,6 +1697,20 @@ function initSyllabus() {
     uploadFiles(e.dataTransfer.files);
   });
 
+  // "Ask from this file" in the file list and in the box shown after an upload
+  $('[data-view="syllabus"]').addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ask-file]");
+    const file = b && syllabusFiles.find((f) => f.id === Number(b.dataset.askFile));
+    if (file) askFromFile(file);
+  });
+  $("#source").addEventListener("change", (e) => {
+    const id = Number(e.target.value);
+    const hadChat = state.history.length > 0;
+    state.file = id ? syllabusFiles.find((f) => f.id === id) || (state.file?.id === id ? state.file : null) : null;
+    newConversation(); // a chat follows one file (or none) from start to end
+    if (hadChat) toast("New chat started. Your last chat is saved in History.");
+  });
+
   $("#syllabus-files").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-del-file]");
     if (!b) return;
@@ -1373,6 +1720,7 @@ function initSyllabus() {
     try {
       await api.deleteSyllabus(id);
       syllabusFiles = syllabusFiles.filter((f) => f.id !== id);
+      if (!$("#upload-done").hidden && $(`#upload-done [data-ask-file="${id}"]`)) $("#upload-done").hidden = true;
       renderSyllabus();
     } catch (err) {
       toast(err.message, "error");
@@ -1381,7 +1729,7 @@ function initSyllabus() {
 
   $("#subject").addEventListener("change", renderSyllabus);
   renderSyllabus();
-  api.listSyllabus().then((files) => { syllabusFiles = files; renderSyllabus(); }).catch(() => {});
+  api.listSyllabus().then((files) => { syllabusFiles = files; syllabusLoaded = true; renderSyllabus(); }).catch(() => {});
 }
 
 /* ---------- Parent link (account menu) ---------- */
@@ -1451,6 +1799,6 @@ initSyllabus();
 initFamily();
 setMode("normal");
 loadFamily();
-syncProgress(); // so a parent sees the roadmap even before the next tick
+loadStudy(); // your plan, roadmap, scores and recent chats (Home shows "Loading…" until then)
 window.addEventListener("hashchange", () => route(true));
 route(false);

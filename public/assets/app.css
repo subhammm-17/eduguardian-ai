@@ -111,11 +111,22 @@
 .recent-list li { padding: 10px 20px; display: grid; gap: 2px; }
 .recent-list li + li { border-top: 1px solid var(--border); }
 .recent-list .q { font-size: 14px; }
+/* Recent questions open their chat: the whole row is a button */
+.recent-list li:has(.recent-open) { padding: 0; }
+.recent-open {
+  display: grid; gap: 2px; width: 100%; padding: 10px 20px; text-align: left;
+  font: inherit; color: inherit; background: none; border: 0; cursor: pointer;
+}
+.recent-open:hover .q { color: var(--accent-text); }
+.chart-empty { margin: 0; padding: 40px 8px; text-align: center; }
 
 /* Ask */
 .ask { display: flex; flex-direction: column; min-height: calc(100vh - var(--topbar-h) - 80px); max-width: 760px; margin: 0 auto; }
 .ask-toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
-.ask-clear { margin-left: auto; }
+.ask-actions { margin-left: auto; display: flex; gap: 8px; }
+.source-pick { display: flex; align-items: center; gap: 8px; }
+.source-pick[hidden] { display: none; }
+.source-pick .select { max-width: 220px; }
 .thread { flex: 1; display: flex; flex-direction: column; gap: 22px; padding: 24px 0; }
 
 .empty { text-align: center; padding: 48px 16px; display: grid; gap: 8px; justify-items: center; }
@@ -203,7 +214,13 @@
 .file-list li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 8px 8px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .file-list li.muted { border-style: dashed; padding: 10px 14px; }
 .file-name { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
-.file-list .btn { margin-left: auto; }
+.file-actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+/* Shown after an upload: "Ask questions from this file" */
+.upload-done {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; border: 1px solid var(--accent-bright); border-radius: var(--radius-sm); background: var(--accent-weak);
+}
+.upload-done[hidden] { display: none; }
 .syllabus-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; margin-bottom: 20px; }
 .syllabus-strip-text { display: grid; gap: 2px; min-width: 0; }
 .syllabus-strip-text strong { font-size: 14px; }
@@ -404,6 +421,18 @@ kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border: 
 .dialog::backdrop { background: rgba(20, 10, 6, 0.6); }
 .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dialog-head h2 { font-family: var(--font-serif); font-size: 20px; }
+/* Chat history */
+.dialog-wide { width: min(600px, calc(100vw - 32px)); max-height: min(640px, calc(100vh - 48px)); }
+.history-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; overflow-y: auto; }
+.history-list li { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding-right: 8px; }
+.history-list li.muted { border-style: dashed; padding: 10px 14px; }
+.history-list li.current { border-color: var(--accent-bright); }
+.history-open {
+  flex: 1; min-width: 0; display: grid; gap: 2px; padding: 10px 14px; text-align: left;
+  font: inherit; color: inherit; background: none; border: 0; cursor: pointer;
+}
+.history-open .q { font-size: 14px; overflow-wrap: anywhere; }
+.history-open:hover .q { color: var(--accent-text); }
 .family-code { display: grid; gap: 6px; padding: 14px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--bg); text-align: center; }
 .family-code-value { font-size: 26px; letter-spacing: 0.12em; color: var(--accent-text); user-select: all; }
 
